@@ -9,13 +9,13 @@
 // lib/configuration_service.dart di github.com/traccar/traccar-client).
 // Nessun link porta l'ID del telefono: resta quello generato dall'app, uguale per tutti i link.
 
-// Invio ogni 5 minuti (11/11/2026). L'app di serie manda anche ogni 75 m percorsi
+// Invio ogni 5 secondi (11/11/2026, prima versione a 5 minuti). L'app di serie manda anche ogni 75 m
 // (distance 75): con distance e angle a 0 conta solo il tempo. heartbeat 300 fa arrivare la
-// posizione ogni 5 minuti anche a bus fermo, quando il rilevamento fermate sospende il GPS.
+// posizione almeno ogni 5 minuti anche a bus fermo, quando il rilevamento fermate sospende il GPS.
 // accuracy 'highest' serve perche' su iPhone l'intervallo vale solo con la precisione massima.
 export const IMPOSTAZIONI = Object.freeze({
   url: 'http://supporto.fsbusitalia.com:5055',
-  interval: 300,
+  interval: 5,
   distance: 0,
   angle: 0,
   heartbeat: 300,

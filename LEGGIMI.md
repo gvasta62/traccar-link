@@ -2,7 +2,7 @@
 
 Tre pagine statiche che aprono Traccar Client sul telefono dell'autista, da mandare su WhatsApp
 (che rende cliccabili solo i link https). Nate l'11/11/2026 sul modello dei link
-`traccar-auto.vercel.app` di un amico, ma con l'invio **ogni 5 minuti**.
+`traccar-auto.vercel.app` di un amico, ma con l'invio **ogni 5 secondi** (la prima versione dell'11/11 era a 5 minuti).
 
 Pubblicate con GitHub Pages dal repository pubblico `gvasta62/traccar-link`:
 
@@ -21,10 +21,10 @@ traccar-client):
 | chiave | valore | perché |
 |---|---|---|
 | url | http://supporto.fsbusitalia.com:5055 | lo stesso dei link dell'amico, scelto dall'utente |
-| interval | 300 | 5 minuti |
+| interval | 5 | 5 secondi, voluto dall'utente |
 | distance | 0 | di serie l'app manda anche ogni 75 m: a 0 conta solo il tempo |
 | angle | 0 | niente invii extra in curva |
-| heartbeat | 300 | una posizione ogni 5 minuti anche a bus fermo |
+| heartbeat | 300 | almeno una posizione ogni 5 minuti anche a bus fermo |
 | accuracy | highest | su iPhone l'intervallo vale solo con la precisione massima |
 | buffer | true | memorizza quando manca la rete |
 | stop_detection | true | come di serie |
