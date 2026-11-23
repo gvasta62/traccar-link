@@ -98,6 +98,7 @@ $('centra').onclick = () => { seguire = true; if (segnaposto) mappa.setView(segn
 function vuoto(titolo, testo) {
   $('vuoto-titolo').textContent = titolo; $('vuoto-testo').textContent = testo;
   $('vuoto').style.display = 'flex';
+  posizioneVista = null; $('scheda').classList.remove('ferma');   // senno' il conteggio dei secondi riscrive la vecchia posizione
   $('stato').textContent = titolo; $('dettaglio').textContent = testo; $('avviso').style.display = 'none';
 }
 function ora(d) { return d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit' }); }
