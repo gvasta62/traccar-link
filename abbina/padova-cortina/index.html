@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Abbinamento QR · Padova – Cortina</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@400;600;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="../abbina.css">
+<style>:root { --linea:#004587; }</style>
+<script>window.PAGINA_LINEA = { codice: 'padova-cortina', nome: 'Padova – Cortina' };</script>
+</head>
+<body>
+<header>
+  <img src="../../img/logo-bianco.png" alt="FS Busitalia">
+  <div><h1 id="titolo">Abbinamento QR · posizione del bus</h1><p>Sceglie quale telefono mostra il QR stampato di questa linea</p></div>
+</header>
+<div class="fascia-linea"><div><small>Linea</small><strong>Padova – Cortina</strong></div></div>
+<main>
+  <section id="accesso" class="riquadro" style="max-width:460px">
+    <h2>Accedi</h2>
+    <p class="nota">Con l'utenza della linea <b>Padova – Cortina</b> (utente <code>op-padova-cortina</code>) o con quella di amministratore. Resta solo in questa scheda del browser.</p>
+    <form id="modulo-accesso">
+      <label for="posta">Utente</label>
+      <input id="posta" autocomplete="username" required>
+      <label for="parola">Password</label>
+      <input id="parola" type="password" autocomplete="current-password" required>
+      <div class="pulsanti"><button id="entra" type="submit">Entra</button></div>
+      <p id="esito-accesso" class="esito errore" role="alert"></p>
+    </form>
+  </section>
+
+  <section id="lavoro" hidden>
+    <div class="testa">
+      <p class="nota" id="chi" style="margin:0"></p>
+      <div class="pulsanti" style="margin:0"><button class="secondario" id="ricarica" type="button">Aggiorna</button>
+        <button class="secondario" id="esci" type="button">Esci</button></div>
+    </div>
+    <div id="linee"></div>
+  </section>
+</main>
+<footer>Busitalia · linea Padova – Cortina · il QR stampato non cambia mai: cambia solo il telefono abbinato</footer>
+
+<template id="modello-linea">
+  <section class="riquadro linea">
+    <h2 class="nome"></h2>
+    <div class="stato"><span class="punto"></span><div><div class="adesso" style="font-weight:600"></div><div class="nota quando" style="margin:0"></div></div></div>
+    <form class="modulo">
+      <div class="griglia">
+        <div><label>ID del telefono da mostrare</label><input class="id" inputmode="numeric" autocomplete="off" required placeholder="es. 00000001"></div>
+        <div><label>Servizio (si legge in cima alla mappa)</label><input class="servizio" autocomplete="off" required></div>
+      </div>
+      <div class="pulsanti">
+        <button type="submit" class="abbina">Abbina questo telefono</button>
+        <button type="button" class="ferma interrompi">Interrompi la condivisione</button>
+        <a class="apri" target="_blank" rel="noopener" style="align-self:center">Apri la mappa pubblica ↗</a>
+      </div>
+      <p class="esito" role="status"></p>
+    </form>
+
+    <h3>Punti notevoli</h3>
+    <p class="nota">Si vedono sulla mappa pubblica. Traccar registra l'ingresso e l'uscita del telefono abbinato
+      (check-in e check-out) da ciascun punto, come per le stazioni. Clicca sulla mappa per prendere le coordinate.</p>
+    <div class="mappa"></div>
+    <table><thead><tr><th>Punto</th><th>Coordinate</th><th>Raggio</th><th></th></tr></thead><tbody class="punti"></tbody></table>
+    <form class="nuovo-punto">
+      <div class="griglia3">
+        <div><label>Nome del punto</label><input class="p-nome" required placeholder="es. Sondrio, autostazione"></div>
+        <div><label>Coordinate (latitudine, longitudine)</label><input class="p-coord" required placeholder="es. 46.1699, 9.8715"></div>
+        <div><label>Raggio (metri)</label><input class="p-raggio" type="number" min="30" max="5000" value="150" required></div>
+        <div><button type="submit" class="secondario">Aggiungi</button></div>
+      </div>
+      <p class="esito esito-punti" role="status"></p>
+    </form>
+  </section>
+</template>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="../abbina.js"></script>
+</body>
+</html>

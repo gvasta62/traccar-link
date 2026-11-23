@@ -9,48 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@400;600;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
-<style>
-:root { --bg:#F2F2F2; --surface:#FFFFFF; --band:#18213E; --ink:#3C3C3B; --ink2:#5E5E5D;
-  --accent:#00665B; --alert:#DD052B; --line:#D9D9D9; --font:'Urbanist', system-ui, sans-serif; }
-* { box-sizing:border-box; }
-body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.6 var(--font); min-height:100vh; display:flex; flex-direction:column; }
-header { background:var(--band); color:#fff; padding:16px 24px; display:flex; align-items:center; gap:18px; }
-header img { height:34px; }
-header h1 { margin:0; font-size:1.45rem; font-weight:900; line-height:1.2; }
-header p { margin:0; opacity:.85; font-size:.95rem; }
-main { flex:1; width:100%; max-width:980px; margin:0 auto; padding:24px 16px 40px; }
-footer { background:var(--band) url('../img/piede-scia.jpg') right center / auto 100% no-repeat; color:#fff; font-size:.8rem; padding:10px 24px; }
-.riquadro { background:var(--surface); border:1px solid var(--line); padding:20px; margin:0 0 20px; }
-h2 { margin:0 0 4px; font-size:1.3rem; font-weight:900; }
-label { display:block; font-weight:600; margin:12px 0 4px; }
-input { font:1rem var(--font); width:100%; padding:10px 12px; border:1px solid #9b9b9b; background:#fff; color:var(--ink); border-radius:0; }
-input:focus { outline:3px solid var(--accent); outline-offset:0; }
-button { font:600 1rem var(--font); border:0; padding:11px 18px; cursor:pointer; background:var(--accent); color:#fff; border-radius:0; }
-button.secondario { background:#fff; color:var(--ink); border:1px solid #9b9b9b; }
-button.ferma { background:#fff; color:var(--alert); border:1px solid var(--alert); }
-button:disabled { opacity:.5; cursor:wait; }
-.pulsanti { display:flex; flex-wrap:wrap; gap:10px; margin-top:16px; }
-.griglia { display:grid; grid-template-columns:1fr 1fr; gap:0 16px; }
-@media (max-width:640px) { .griglia { grid-template-columns:1fr; } header { padding:14px 16px; } }
-.stato { display:flex; gap:10px; align-items:flex-start; padding:12px 14px; background:var(--bg); margin-top:10px; }
-.punto { width:12px; height:12px; border-radius:50%; margin-top:7px; flex:none; background:#9b9b9b; }
-.punto.attivo { background:var(--accent); } .punto.vecchio { background:var(--alert); }
-.nota { color:var(--ink2); font-size:.92rem; margin:6px 0 0; }
-.esito { margin:12px 0 0; font-weight:600; min-height:1.6em; }
-.esito.ok { color:var(--accent); } .esito.errore { color:var(--alert); }
-.testa { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin:0 0 16px; }
-a { color:var(--accent); font-weight:600; }
-[hidden] { display:none !important; }
-h3 { margin:22px 0 2px; font-size:1.1rem; font-weight:900; padding-top:16px; border-top:1px solid var(--line); }
-.mappa { height:320px; margin-top:10px; background:#dfe3e6; }
-table { width:100%; border-collapse:collapse; margin-top:10px; font-size:.95rem; }
-th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:middle; }
-th { font-weight:600; color:var(--ink2); }
-td button { padding:5px 10px; font-size:.9rem; }
-.griglia3 { display:grid; grid-template-columns:2fr 2fr 1fr auto; gap:0 12px; align-items:end; }
-@media (max-width:640px) { .griglia3 { grid-template-columns:1fr; } }
-.leaflet-container { font-family:var(--font); }
-</style>
+<link rel="stylesheet" href="abbina.css">
 </head>
 <body>
 <header>
@@ -58,11 +17,16 @@ td button { padding:5px 10px; font-size:.9rem; }
   <div><h1 id="titolo">Abbinamento QR · posizione del bus</h1><p>Sceglie quale telefono mostra il QR stampato di ogni linea</p></div>
 </header>
 <main>
+  <nav class="elenco-linee" aria-label="Pagine delle linee" style="margin:0 0 24px">
+    <a href="milano-livigno/" style="--c:#00665B">Milano – Livigno<span>pagina della linea · utente op-milano-livigno</span></a>
+    <a href="padova-cortina/" style="--c:#004587">Padova – Cortina<span>pagina della linea · utente op-padova-cortina</span></a>
+    <a href="bergamo/" style="--c:#B91372">Bergamo – destinazione da definire<span>pagina della linea · utente op-bergamo</span></a>
+  </nav>
   <section id="accesso" class="riquadro" style="max-width:460px">
     <h2>Accedi</h2>
     <p class="nota">Con l'utenza Traccar di amministratore (la stessa di traccar.fsbusitalia.com). Resta solo in questa scheda del browser.</p>
     <form id="modulo-accesso">
-      <label for="posta">Utente (posta)</label>
+      <label for="posta">Utente</label>
       <input id="posta" autocomplete="username" required>
       <label for="parola">Password</label>
       <input id="parola" type="password" autocomplete="current-password" required>
@@ -118,204 +82,6 @@ td button { padding:5px 10px; font-size:.9rem; }
 </template>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<script>
-'use strict';
-// Ogni linea è un utente Traccar «qr-<linea>» in sola lettura (creato da crea_linea.py). Il QR stampato contiene il
-// suo codice d'accesso; questa pagina decide quale telefono quell'utente vede, togliendo tutti gli altri.
-const SERVER = 'https://traccar.fsbusitalia.com';
-const PREFISSO = 'qr-';
-// una pagina per linea: abbina/?linea=milano-livigno mostra solo quella; senza ?linea si vedono tutte
-const LINEA = (new URLSearchParams(location.search).get('linea') || '').trim().toLowerCase();
-const $ = s => document.querySelector(s);
-let chiave = sessionStorage.getItem('abbina_chiave') || '';
-
-async function api(percorso, metodo = 'GET', corpo) {
-  const r = await fetch(SERVER + percorso, { method: metodo, cache: 'no-store',
-    headers: { Authorization: 'Basic ' + chiave, Accept: 'application/json', ...(corpo ? { 'Content-Type': 'application/json' } : {}) },
-    body: corpo ? JSON.stringify(corpo) : undefined });
-  if (r.status === 401) throw new Error('Utente o password non validi.');
-  if (!r.ok) throw new Error('Il server ha risposto ' + r.status + ': ' + (await r.text()).slice(0, 200));
-  const t = await r.text(); return t ? JSON.parse(t) : null;
-}
-
-$('#modulo-accesso').onsubmit = async ev => {
-  ev.preventDefault();
-  chiave = btoa(unescape(encodeURIComponent($('#posta').value.trim() + ':' + $('#parola').value)));
-  $('#entra').disabled = true; $('#esito-accesso').textContent = '';
-  try { await carica(); sessionStorage.setItem('abbina_chiave', chiave); }
-  catch (e) { chiave = ''; $('#esito-accesso').textContent = e.message; }
-  finally { $('#entra').disabled = false; }
-};
-$('#esci').onclick = () => { sessionStorage.removeItem('abbina_chiave'); location.reload(); };
-$('#ricarica').onclick = () => carica().catch(e => alert(e.message));
-
-function quando(iso) {
-  if (!iso) return 'mai';
-  const d = new Date(iso), s = Math.round((Date.now() - d) / 1000);
-  const t = d.toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  return t + (s < 120 ? ' (' + s + ' s fa)' : s < 7200 ? ' (' + Math.round(s / 60) + ' min fa)' : '');
-}
-
-async function carica() {
-  const io = await api('/api/session?_=' + Date.now()).catch(() => null);  // solo per salutare: la prova vera è /api/users
-  const utenti = await api('/api/users');
-  const linee = utenti.filter(u => LINEA ? (u.email || '').toLowerCase() === PREFISSO + LINEA
-                                        : (u.email || '').toLowerCase().startsWith(PREFISSO))
-                      .sort((a, b) => a.email.localeCompare(b.email));
-  $('#accesso').hidden = true; $('#lavoro').hidden = false;
-  $('#chi').textContent = 'Collegato come ' + (io ? io.name : 'amministratore') + ' · ' + linee.length + (linee.length === 1 ? ' linea' : ' linee');
-  const box = $('#linee'); box.innerHTML = '';
-  if (!linee.length) box.innerHTML = LINEA
-    ? '<p class="riquadro">La linea «' + LINEA.replace(/[<>&"]/g, '') + '» non esiste ancora: va creata con <code>crea_linea.py</code>.</p>'
-    : '<p class="riquadro">Nessuna linea: va creata la prima con <code>crea_linea.py</code>.</p>';
-  if (LINEA && linee.length) $('#titolo').textContent = 'Abbinamento QR · ' + ((linee[0].attributes || {}).servizio || linee[0].name);
-  const geoaree = await api('/api/geofences?all=true');
-  for (const u of linee) {
-    const codice = u.email.slice(PREFISSO.length).toLowerCase();
-    const el = await scheda(u, geoaree.filter(g => ((g.attributes || {}).linea || '').toLowerCase() === codice), codice);
-    box.appendChild(el); el._disegna();
-  }
-}
-
-async function scheda(u, punti, codice) {
-  const el = $('#modello-linea').content.firstElementChild.cloneNode(true);
-  const servizio = (u.attributes && u.attributes.servizio) || u.name;
-  el.querySelector('.nome').textContent = servizio + '  ·  QR «' + u.email.slice(PREFISSO.length) + '»';
-  el.querySelector('.servizio').value = servizio;
-  const link = u.attributes && u.attributes.link;
-  const apri = el.querySelector('.apri'); if (link) apri.href = link; else apri.hidden = true;
-  const visti = await api('/api/devices?userId=' + u.id);
-  const pallino = el.querySelector('.punto');
-  if (!visti.length) { el.querySelector('.adesso').textContent = 'Nessun telefono abbinato: il QR mostra «Nessun bus in condivisione».'; }
-  else {
-    const d = visti[0];
-    el.querySelector('.adesso').textContent = 'Mostra adesso: ' + d.name + ' · ID ' + d.uniqueId + (visti.length > 1 ? '  (ATTENZIONE: ' + visti.length + ' telefoni, riabbina)' : '');
-    el.querySelector('.quando').textContent = 'Ultima posizione ricevuta: ' + quando(d.lastUpdate) + ' · ' + (d.status === 'online' ? 'in linea' : 'non in linea');
-    el.querySelector('.id').value = d.uniqueId;
-    const vecchia = !d.lastUpdate || (Date.now() - new Date(d.lastUpdate)) > 10 * 60 * 1000;
-    pallino.classList.add(vecchia ? 'vecchio' : 'attivo');
-  }
-  const esito = el.querySelector('.esito');
-  const occupato = v => el.querySelectorAll('button').forEach(b => b.disabled = v);
-  const dici = (t, ok) => { esito.textContent = t; esito.className = 'esito ' + (ok ? 'ok' : 'errore'); };
-
-  el.querySelector('.modulo').onsubmit = async ev => {
-    ev.preventDefault(); occupato(true); dici('Abbino…', true);
-    try {
-      const id = el.querySelector('.id').value.trim();
-      const trovati = await api('/api/devices?uniqueId=' + encodeURIComponent(id));
-      if (!trovati.length) throw new Error('Nessun telefono con ID ' + id + ' su Traccar. Controlla il numero nell\'app Traccar Client (voce «Identificatore»).');
-      const nuovo = trovati[0];
-      await togliTutto(u, nuovo.id, punti);
-      if (!(await api('/api/devices?userId=' + u.id)).some(d => d.id === nuovo.id))
-        await api('/api/permissions', 'POST', { userId: u.id, deviceId: nuovo.id });
-      await geoareeAlTelefono(nuovo.id, punti);
-      await scriviServizio(u, el.querySelector('.servizio').value.trim());
-      const ora = await api('/api/devices?userId=' + u.id);           // controllo: deve vedere quello e basta
-      if (ora.length !== 1 || ora[0].id !== nuovo.id) throw new Error('Controllo non superato: la linea vede ' + ora.length + ' telefoni. Riprova.');
-      dici('Fatto: il QR ora mostra ' + nuovo.name + ' (ID ' + nuovo.uniqueId + ').', true);
-      setTimeout(() => carica().catch(() => {}), 1500);
-    } catch (e) { dici(e.message, false); } finally { occupato(false); }
-  };
-  el.querySelector('.interrompi').onclick = async () => {
-    occupato(true); dici('Interrompo…', true);
-    try {
-      await togliTutto(u, null, punti);
-      const ora = await api('/api/devices?userId=' + u.id);
-      if (ora.length) throw new Error('Controllo non superato: la linea vede ancora ' + ora.length + ' telefoni.');
-      dici('Condivisione interrotta: il QR mostra «Nessun bus in condivisione».', true);
-      setTimeout(() => carica().catch(() => {}), 1500);
-    } catch (e) { dici(e.message, false); } finally { occupato(false); }
-  };
-  // ---- punti notevoli: geo aree Traccar con attributo linea=<codice> ----
-  const corpo = el.querySelector('.punti');
-  let mappa = null, strato = null;
-  el._disegna = () => {
-    mappa = L.map(el.querySelector('.mappa')).setView([45.9, 10.2], 7);
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' }).addTo(mappa);
-    strato = L.featureGroup().addTo(mappa);
-    mappa.on('click', ev => { el.querySelector('.p-coord').value = ev.latlng.lat.toFixed(6) + ', ' + ev.latlng.lng.toFixed(6); });
-    elenca();
-  };
-  function elenca() {
-    corpo.innerHTML = ''; strato.clearLayers();
-    if (!punti.length) corpo.innerHTML = '<tr><td colspan="4" class="nota">Nessun punto per questa linea.</td></tr>';
-    for (const g of punti) {
-      const c = cerchio(g.area); const tr = document.createElement('tr');
-      tr.innerHTML = '<td></td><td></td><td></td><td><button type="button" class="ferma">Elimina</button></td>';
-      tr.cells[0].textContent = g.name.replace(/^.*? · /, '');
-      tr.cells[1].textContent = c ? c.lat.toFixed(5) + ', ' + c.lon.toFixed(5) : g.area;
-      tr.cells[2].textContent = c ? Math.round(c.r) + ' m' : '';
-      tr.querySelector('button').onclick = () => elimina(g);
-      corpo.appendChild(tr);
-      if (c) L.circle([c.lat, c.lon], { radius: c.r, color: '#00665B', weight: 2, fillOpacity: .15 }).addTo(strato)
-               .bindTooltip(tr.cells[0].textContent, { permanent: true, direction: 'top' });
-    }
-    if (strato.getLayers().length) mappa.fitBounds(strato.getBounds().pad(0.3), { maxZoom: 14 });
-  }
-  const esitoP = el.querySelector('.esito-punti');
-  const diciP = (t, ok) => { esitoP.textContent = t; esitoP.className = 'esito esito-punti ' + (ok ? 'ok' : 'errore'); };
-  el.querySelector('.nuovo-punto').onsubmit = async ev => {
-    ev.preventDefault();
-    const nome = el.querySelector('.p-nome').value.trim();
-    const m = el.querySelector('.p-coord').value.match(/(-?\d+(?:[.,]\d+)?)\s*[,; ]\s*(-?\d+(?:[.,]\d+)?)/);
-    const raggio = Math.round(+el.querySelector('.p-raggio').value);
-    if (!m) { diciP('Coordinate non riconosciute: scrivi «46.1699, 9.8715» oppure clicca sulla mappa.', false); return; }
-    const lat = +m[1].replace(',', '.'), lon = +m[2].replace(',', '.');
-    if (Math.abs(lat) > 90 || Math.abs(lon) > 180) { diciP('Coordinate fuori scala.', false); return; }
-    diciP('Aggiungo…', true);
-    try {
-      const servizio = (u.attributes && u.attributes.servizio) || u.name;
-      const g = await api('/api/geofences', 'POST', { name: servizio + ' · ' + nome, description: 'Punto notevole della linea ' + servizio,
-        area: 'CIRCLE (' + lat + ' ' + lon + ', ' + raggio + ')', attributes: { linea: codice } });
-      await api('/api/permissions', 'POST', { userId: u.id, geofenceId: g.id });       // per la mappa pubblica
-      for (const d of await api('/api/devices?userId=' + u.id))                         // per il check-in e check-out
-        await api('/api/permissions', 'POST', { deviceId: d.id, geofenceId: g.id });
-      punti.push(g); elenca(); el.querySelector('.p-nome').value = ''; el.querySelector('.p-coord').value = '';
-      diciP('Aggiunto «' + nome + '».', true);
-    } catch (e) { diciP(e.message, false); }
-  };
-  async function elimina(g) {
-    if (!confirm('Eliminare il punto «' + g.name + '»?')) return;
-    try { await api('/api/geofences/' + g.id, 'DELETE'); punti.splice(punti.indexOf(g), 1); elenca(); diciP('Eliminato.', true); }
-    catch (e) { diciP(e.message, false); }
-  }
-  return el;
-}
-
-function cerchio(area) {
-  const m = /CIRCLE\s*\(\s*(-?[\d.]+)\s+(-?[\d.]+)\s*,\s*([\d.]+)\s*\)/i.exec(area || '');
-  return m ? { lat: +m[1], lon: +m[2], r: +m[3] } : null;
-}
-
-async function geoareeAlTelefono(deviceId, punti) {
-  const gia = new Set((await api('/api/geofences?deviceId=' + deviceId)).map(g => g.id));
-  for (const g of punti) if (!gia.has(g.id)) await api('/api/permissions', 'POST', { deviceId, geofenceId: g.id });
-}
-
-async function togliTutto(u, tranne, punti = []) {
-  // via i gruppi (un gruppo farebbe vedere tutti i suoi telefoni) e via ogni telefono diverso da quello scelto
-  for (const g of await api('/api/groups?userId=' + u.id))
-    await api('/api/permissions', 'DELETE', { userId: u.id, groupId: g.id });
-  for (const d of await api('/api/devices?userId=' + u.id))
-    if (d.id !== tranne) {
-      // il telefono che esce dalla linea perde anche i punti notevoli: niente check-in a nome della linea
-      const sue = new Set((await api('/api/geofences?deviceId=' + d.id)).map(g => g.id));
-      for (const g of punti) if (sue.has(g.id)) await api('/api/permissions', 'DELETE', { deviceId: d.id, geofenceId: g.id });
-      await api('/api/permissions', 'DELETE', { userId: u.id, deviceId: d.id });
-    }
-}
-
-async function scriviServizio(u, servizio) {
-  if (!servizio) return;
-  const attuale = await api('/api/users/' + u.id);
-  if ((attuale.attributes || {}).servizio === servizio) return;
-  attuale.attributes = { ...(attuale.attributes || {}), servizio };
-  await api('/api/users/' + u.id, 'PUT', attuale);
-}
-
-if (chiave) carica().catch(() => { sessionStorage.removeItem('abbina_chiave'); chiave = ''; });
-</script>
+<script src="abbina.js"></script>
 </body>
 </html>
