@@ -32,3 +32,15 @@ traccar-client):
 Per cambiare qualcosa: si modifica `apri-traccar.js`, poi commit e push; GitHub Pages pubblica
 da solo in un paio di minuti. Le pagine sono pubbliche: contengono solo l'indirizzo del server.
 Funziona uguale su Mac e Windows (solo file statici, nessuna compilazione).
+
+
+## QR posizione del bus (23/11/2026)
+
+- `posizione/`: la mappa pubblica che si apre dal QR di una linea (`#t=<codice>`, il codice non è nel repository).
+- `abbina/`: l'abbinamento dei telefoni alle linee. Parte comune in `abbina.js` e `abbina.css`; una pagina per linea in
+  `abbina/<linea>/`, generata da `modello_linea.html` con `qr_posizione/crea_linea.py` (nome e colore in
+  `qr_posizione/linee.json`); `abbina/` elenca le linee ed è la pagina dell'amministratore.
+- `img/`: logo bianco e scia del piede (grafica Busitalia 05_2026).
+
+Nessuna credenziale nelle pagine: l'operatore scrive la sua utenza, che resta nella scheda del browser. Dettagli in
+`tracker_corse_sostitutive/qr_posizione/LEGGIMI.md`.
