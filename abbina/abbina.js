@@ -48,7 +48,7 @@ async function carica() {
   $('#chi').textContent = 'Collegato come ' + (io ? io.name : 'amministratore') + ' · ' + linee.length + (linee.length === 1 ? ' linea' : ' linee');
   const box = $('#linee'); box.innerHTML = '';
   if (!linee.length) box.innerHTML = LINEA
-    ? '<p class="riquadro">Con questa utenza la linea «' + LINEA.replace(/[<>&"]/g, '') + '» non si vede: entra con l\'utenza della linea (op-' + LINEA.replace(/[<>&"]/g, '') + ') o di amministratore.</p>'
+    ? '<p class="riquadro">Con questa utenza la linea «' + LINEA.replace(/[<>&"]/g, '') + '» non si vede: entra con l\'utenza dell\'operatore di questa linea o di amministratore.</p>'
     : '<p class="riquadro">Nessuna linea: va creata la prima con <code>crea_linea.py</code>.</p>';
   if (LINEA && linee.length && !PAGINA) $('#titolo').textContent = 'Abbinamento QR · ' + ((linee[0].attributes || {}).servizio || linee[0].name);
   for (const u of linee) {
