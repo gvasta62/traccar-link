@@ -20,7 +20,8 @@
   <nav class="elenco-linee" aria-label="Pagine delle linee" style="margin:0 0 24px">
     <a href="milano-livigno/" style="--c:#00665B">Milano – Livigno<span>pagina della linea</span></a>
     <a href="padova-cortina/" style="--c:#004587">Padova – Cortina<span>pagina della linea</span></a>
-    <a href="bergamo/" style="--c:#B91372">Bergamo – destinazione da definire<span>pagina della linea</span></a>
+    <a href="bergamo/" style="--c:#B91372">Bergamo – Orio al Serio<span>pagina della linea</span></a>
+    <a href="crotone-perugia/" style="--c:#1B9AAA">Crotone – Perugia<span>pagina della linea</span></a>
   </nav>
   <section id="accesso" class="riquadro" style="max-width:460px">
     <h2>Accedi</h2>
@@ -47,22 +48,27 @@
 </main>
 <footer>Busitalia · il QR stampato non cambia mai: cambia solo il telefono abbinato</footer>
 
+<template id="modello-direzione">
+  <form class="direzione">
+    <h4 class="d-nome"></h4>
+    <div class="stato"><span class="punto"></span><div><div class="adesso" style="font-weight:600"></div><div class="nota quando" style="margin:0"></div></div></div>
+    <div class="riga-id">
+      <div><label>ID del telefono da mostrare</label><input class="id" inputmode="numeric" autocomplete="off" required placeholder="es. 00000001"></div>
+      <button type="submit" class="abbina">Abbina questo telefono</button>
+      <button type="button" class="ferma interrompi">Interrompi</button>
+    </div>
+  </form>
+</template>
 <template id="modello-linea">
   <section class="riquadro linea">
     <h2 class="nome"></h2>
-    <div class="stato"><span class="punto"></span><div><div class="adesso" style="font-weight:600"></div><div class="nota quando" style="margin:0"></div></div></div>
-    <form class="modulo">
-      <div class="griglia">
-        <div><label>ID del telefono da mostrare</label><input class="id" inputmode="numeric" autocomplete="off" required placeholder="es. 00000001"></div>
-        <div><label>Servizio (si legge in cima alla mappa)</label><input class="servizio" autocomplete="off" required></div>
-      </div>
-      <div class="pulsanti">
-        <button type="submit" class="abbina">Abbina questo telefono</button>
-        <button type="button" class="ferma interrompi">Interrompi la condivisione</button>
-        <a class="apri" target="_blank" rel="noopener" style="align-self:center">Apri la mappa pubblica ↗</a>
-      </div>
-      <p class="esito" role="status"></p>
-    </form>
+    <div class="griglia">
+      <div><label>Servizio (si legge in cima alla mappa)</label><input class="servizio" autocomplete="off"></div>
+      <div class="pulsanti" style="align-self:end;margin:0"><button type="button" class="secondario salva-servizio">Salva il nome</button>
+        <a class="apri" target="_blank" rel="noopener" style="align-self:center">Apri la mappa pubblica ↗</a></div>
+    </div>
+    <div class="direzioni"></div>
+    <p class="esito" role="status"></p>
 
     <h3>Punti notevoli</h3>
     <p class="nota">Si vedono sulla mappa pubblica. Traccar registra l'ingresso e l'uscita del telefono abbinato

@@ -28,10 +28,17 @@ header h1 { margin:0; font-size:1.35rem; font-weight:900; line-height:1.15; whit
 #scheda { background:var(--surface); border-top:4px solid var(--accent); padding:14px 16px;
   padding-bottom:max(14px, env(safe-area-inset-bottom)); }
 #scheda.ferma { border-top-color:var(--alert); }
-#stato { font-size:1.15rem; font-weight:900; margin:0; }
-#dettaglio { margin:2px 0 0; color:var(--ink2); }
-#avviso { margin:8px 0 0; color:var(--alert); font-weight:600; display:none; }
+#scheda.vuota { border-top-color:var(--ink2); }
+.stato { font-size:1.15rem; font-weight:900; margin:0; }
+.dettaglio { margin:2px 0 0; color:var(--ink2); }
+.avviso { margin:4px 0 0; color:var(--alert); font-weight:600; }
+.avviso:empty { display:none; }
 .riga { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.riga + .riga { border-top:1px solid #D9D9D9; margin-top:10px; padding-top:10px; }
+.riga.ferma .stato { color:var(--alert); }
+.dir { display:flex; align-items:center; gap:8px; font-size:.95rem; font-weight:900; margin:0; }
+.dir i { width:12px; height:12px; display:inline-block; flex:none; }
+.multi .stato { font-size:1.05rem; }
 button { font:600 1rem var(--font); background:var(--accent); color:#fff; border:0; padding:10px 14px; cursor:pointer; }
 button:focus-visible { outline:3px solid var(--band); outline-offset:2px; }
 footer { background:var(--band) url('../img/piede-scia.jpg') right center / auto 100% no-repeat; color:#fff;
@@ -60,14 +67,7 @@ main { position:relative; flex:1; display:flex; flex-direction:column; }
   <div id="vuoto" role="status"><div><h2 id="vuoto-titolo">Un momento…</h2><p id="vuoto-testo">Sto cercando il bus.</p></div></div>
 </main>
 <section id="scheda" aria-live="polite">
-  <div class="riga">
-    <div>
-      <p id="stato">Cerco il bus…</p>
-      <p id="dettaglio">&nbsp;</p>
-    </div>
-    <button id="centra" type="button">Centra</button>
-  </div>
-  <p id="avviso"></p>
+  <div class="riga"><div><p class="stato">Cerco il bus…</p><p class="dettaglio">&nbsp;</p></div></div>
 </section>
 <footer>Busitalia · posizione aggiornata ogni 5 secondi</footer>
 
@@ -87,19 +87,28 @@ const $ = id => document.getElementById(id);
 const mappa = L.map('mappa', { zoomControl: true, attributionControl: true }).setView([45.9, 10.2], 7);
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19,
   attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' }).addTo(mappa);
-const icona = L.divIcon({ className: 'bus-icona', iconSize: [46, 46], iconAnchor: [23, 23], html:
-  '<svg width="46" height="46" viewBox="0 0 46 46" aria-hidden="true"><circle cx="23" cy="23" r="21" fill="#00665B" stroke="#fff" stroke-width="3"/>' +
+// Un colore per direzione, come nella pagina di abbinamento (Verde e Blu della palette FS)
+const COLORI = ['#00665B', '#004587', '#B91372', '#1B9AAA'];
+const icona = c => L.divIcon({ className: 'bus-icona', iconSize: [46, 46], iconAnchor: [23, 23], html:
+  `<svg width="46" height="46" viewBox="0 0 46 46" aria-hidden="true"><circle cx="23" cy="23" r="21" fill="${c}" stroke="#fff" stroke-width="3"/>` +
   '<g fill="#fff"><rect x="13" y="12" width="20" height="19"/><rect x="15" y="31" width="4" height="4"/><rect x="27" y="31" width="4" height="4"/></g>' +
-  '<g fill="#00665B"><rect x="15" y="14" width="16" height="8"/><circle cx="17" cy="27" r="1.6"/><circle cx="29" cy="27" r="1.6"/></g></svg>' });
-let segnaposto = null, alone = null, seguire = true, primo = true, ultimoId = null;
-mappa.on('dragstart', () => { seguire = false; });
-$('centra').onclick = () => { seguire = true; if (segnaposto) mappa.setView(segnaposto.getLatLng(), Math.max(mappa.getZoom(), 14)); };
+  `<g fill="${c}"><rect x="15" y="14" width="16" height="8"/><circle cx="17" cy="27" r="1.6"/><circle cx="29" cy="27" r="1.6"/></g></svg>` });
+
+// Una linea puo' avere un bus per direzione: l'utente del QR vede un telefono per direzione, e l'attributo
+// «direzioni» (testo JSON, scritto dalla pagina di abbinamento) dice quale direzione fa ciascun telefono.
+let direzioni = [];                       // [{nome, deviceId}]
+const bus = new Map();                    // deviceId -> {segnaposto, alone, posizione, nome, colore}
+let seguire = 'tutti', primo = true, firma = '';
+mappa.on('dragstart', () => { seguire = null; });
 
 function vuoto(titolo, testo) {
   $('vuoto-titolo').textContent = titolo; $('vuoto-testo').textContent = testo;
   $('vuoto').style.display = 'flex';
-  posizioneVista = null; $('scheda').classList.remove('ferma');   // senno' il conteggio dei secondi riscrive la vecchia posizione
-  $('stato').textContent = titolo; $('dettaglio').textContent = testo; $('avviso').style.display = 'none';
+  for (const b of bus.values()) { b.segnaposto.remove(); b.alone.remove(); }
+  bus.clear(); firma = ''; primo = true; seguire = 'tutti';
+  $('scheda').className = 'vuota';
+  $('scheda').innerHTML = '<div class="riga"><div><p class="stato"></p><p class="dettaglio"></p></div></div>';
+  $('scheda').querySelector('.stato').textContent = titolo; $('scheda').querySelector('.dettaglio').textContent = testo;
 }
 function ora(d) { return d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit' }); }
 function quanto(ms) {
@@ -115,13 +124,14 @@ async function api(percorso) {
   return r.json();
 }
 async function leggiServizio() {
-  // /api/session?token= restituisce l'utente della linea: il nome del servizio sta nei suoi attributi
+  // /api/session?token= restituisce l'utente della linea: nome del servizio e direzioni stanno nei suoi attributi
   try {
     const r = await fetch(SERVER + '/api/session?token=' + encodeURIComponent(CODICE), { cache: 'no-store' });
     if (!r.ok) return;
-    const u = await r.json();
-    const nome = (u.attributes && u.attributes.servizio) || u.name || '';
+    const u = await r.json(), at = u.attributes || {};
+    const nome = at.servizio || u.name || '';
     $('servizio').textContent = nome; document.title = 'Dove si trova il bus · ' + nome;
+    try { const v = JSON.parse(at.direzioni || '[]'); direzioni = Array.isArray(v) ? v : []; } catch (e) { direzioni = []; }
     linea = (u.email || '').replace(/^qr-/i, '').toLowerCase();
     await leggiPunti();
   } catch (e) { /* il nome resta quello di prima */ }
@@ -153,54 +163,98 @@ function vicinoA(p) {
   return dentro.length ? dentro[0].nome : '';
 }
 
-let posizioneVista = null;
 async function aggiorna() {
   if (!CODICE) { vuoto('Codice non valido', 'Il collegamento è incompleto: inquadra di nuovo il codice QR.'); return; }
   try {
     const dispositivi = await api('/api/devices');
     if (!dispositivi.length) {
-      if (segnaposto) { segnaposto.remove(); alone.remove(); segnaposto = null; }
-      vuoto('Nessun bus in condivisione', 'In questo momento la posizione di questa linea non è condivisa. Riprova più tardi.');
-      ultimoId = null; return;
+      vuoto('Nessun bus in condivisione', 'In questo momento la posizione di questa linea non è condivisa. Riprova più tardi.'); return;
     }
-    const d = dispositivi[0];
-    if (d.id !== ultimoId) { primo = true; seguire = true; ultimoId = d.id; }
+    const nuovaFirma = dispositivi.map(d => d.id).sort().join(',');
+    if (nuovaFirma !== firma) { await leggiServizio(); }          // telefoni cambiati: rileggo le direzioni
     const posizioni = await api('/api/positions');
-    const p = posizioni.find(x => x.deviceId === d.id);
-    if (!p) { vuoto('Posizione non ancora disponibile', 'Il telefono a bordo non ha ancora inviato la sua posizione.'); return; }
+    // ordine e colore: quello delle direzioni; i telefoni senza direzione in coda
+    const ordine = dispositivi.map(d => ({ d, i: direzioni.findIndex(x => +x.deviceId === d.id) }))
+                              .sort((a, b) => (a.i < 0 ? 99 : a.i) - (b.i < 0 ? 99 : b.i));
+    for (const id of [...bus.keys()]) if (!dispositivi.some(d => d.id === id)) { bus.get(id).segnaposto.remove(); bus.get(id).alone.remove(); bus.delete(id); }
+    ordine.forEach(({ d, i }, k) => {
+      const colore = COLORI[(i < 0 ? k : i) % COLORI.length];
+      const nome = i >= 0 ? (direzioni[i].nome || '') : '';
+      const p = posizioni.find(x => x.deviceId === d.id) || null;
+      let b = bus.get(d.id);
+      if (!b && p) {
+        const dove = [p.latitude, p.longitude];
+        b = { alone: L.circle(dove, { radius: Math.max(p.accuracy || 0, 15), color: colore, weight: 1, fillOpacity: .12 }).addTo(mappa),
+              segnaposto: L.marker(dove, { icon: icona(colore), keyboard: false, title: nome || 'Il bus' }).addTo(mappa) };
+        bus.set(d.id, b);
+      }
+      if (b) {
+        Object.assign(b, { posizione: p, nome, colore });
+        if (p) { b.segnaposto.setLatLng([p.latitude, p.longitude]); b.alone.setLatLng([p.latitude, p.longitude]).setRadius(Math.max(p.accuracy || 0, 15)); }
+        b.segnaposto.unbindTooltip();
+        if (nome && ordine.length > 1) b.segnaposto.bindTooltip(nome, { permanent: true, direction: 'top', offset: [0, -22], className: 'etichetta' });
+      }
+    });
+    if (!bus.size) { vuoto('Posizione non ancora disponibile', 'Il telefono a bordo non ha ancora inviato la sua posizione.'); return; }
     $('vuoto').style.display = 'none';
-    posizioneVista = p; mostra(p);
+    if (nuovaFirma !== firma) { firma = nuovaFirma; costruisciScheda(ordine.map(o => o.d.id)); primo = true; seguire = 'tutti'; }
+    inquadra();
+    scrivi();
   } catch (e) {
     if (e.message === 'codice') vuoto('Codice non più valido', 'Questo codice QR non è più attivo. Rivolgiti al personale Busitalia.');
-    else { $('avviso').textContent = 'Connessione assente: riprovo fra pochi secondi.'; $('avviso').style.display = 'block'; }
+    else { const a = $('scheda').querySelector('.avviso'); if (a) a.textContent = 'Connessione assente: riprovo fra pochi secondi.'; }
   }
 }
-function mostra(p) {
-  const dove = [p.latitude, p.longitude];
-  if (!segnaposto) {
-    alone = L.circle(dove, { radius: Math.max(p.accuracy || 0, 15), color: '#00665B', weight: 1, fillOpacity: .12 }).addTo(mappa);
-    segnaposto = L.marker(dove, { icon: icona, keyboard: false, title: 'Il bus' }).addTo(mappa);
-  } else { segnaposto.setLatLng(dove); alone.setLatLng(dove).setRadius(Math.max(p.accuracy || 0, 15)); }
-  if (primo) { mappa.setView(dove, 15); primo = false; } else if (seguire) mappa.panTo(dove, { animate: true });
-  scrivi(p);
+function inquadra() {
+  const tutti = [...bus.values()].filter(b => b.posizione).map(b => [b.posizione.latitude, b.posizione.longitude]);
+  if (!tutti.length) return;
+  if (seguire === 'tutti') {
+    if (tutti.length === 1) { if (primo) mappa.setView(tutti[0], 15); else mappa.panTo(tutti[0], { animate: true }); }
+    else mappa.fitBounds(L.latLngBounds(tutti), { padding: [64, 64], maxZoom: 13, animate: !primo });
+  } else if (seguire != null && bus.get(seguire) && bus.get(seguire).posizione) {
+    const p = bus.get(seguire).posizione; mappa.panTo([p.latitude, p.longitude], { animate: true });
+  }
+  primo = false;
 }
-function scrivi(p) {
-  if (!p) return;
-  const quando = new Date(p.fixTime), eta = Date.now() - quando.getTime();
-  const kmh = Math.round((p.speed || 0) * 1.852);       // Traccar dà la velocità in nodi
-  const vecchia = eta > VECCHIA;
-  const qui = vicinoA(p);
-  $('stato').textContent = (vecchia ? 'Ultima posizione nota' : (kmh >= 5 ? 'In viaggio · ' + kmh + ' km/h' : 'Fermo')) + (qui ? ' · ' + qui : '');
-  $('dettaglio').textContent = 'Aggiornata alle ' + ora(quando) + ' · ' + quanto(eta);
-  $('scheda').classList.toggle('ferma', vecchia);
-  $('avviso').textContent = vecchia ? 'Il telefono a bordo non invia la posizione da ' + quanto(eta).replace(' fa', '') + ': il bus potrebbe essere altrove.' : '';
-  $('avviso').style.display = vecchia ? 'block' : 'none';
+function costruisciScheda(ids) {
+  const multi = ids.length > 1;
+  $('scheda').className = multi ? 'multi' : '';
+  $('scheda').innerHTML = '';
+  for (const id of ids) {
+    const r = document.createElement('div'); r.className = 'riga'; r.dataset.id = id;
+    r.innerHTML = '<div><p class="dir"><i></i><span></span></p><p class="stato"></p><p class="dettaglio"></p><p class="avviso"></p></div><button type="button">Centra</button>';
+    r.querySelector('button').onclick = () => {
+      const b = bus.get(id); if (!b || !b.posizione) return;
+      seguire = multi ? id : 'tutti'; mappa.setView([b.posizione.latitude, b.posizione.longitude], Math.max(mappa.getZoom(), 14));
+    };
+    $('scheda').appendChild(r);
+  }
+}
+function scrivi() {
+  let tutteVecchie = true;
+  for (const r of $('scheda').querySelectorAll('.riga[data-id]')) {
+    const b = bus.get(+r.dataset.id), multi = bus.size > 1;
+    const dir = r.querySelector('.dir');
+    dir.style.display = multi && b && b.nome ? '' : 'none';
+    if (b) { dir.querySelector('i').style.background = b.colore; dir.querySelector('span').textContent = b.nome; }
+    const p = b && b.posizione;
+    if (!p) { r.querySelector('.stato').textContent = 'Posizione non ancora disponibile'; r.querySelector('.dettaglio').textContent = ''; continue; }
+    const quando = new Date(p.fixTime), eta = Date.now() - quando.getTime();
+    const kmh = Math.round((p.speed || 0) * 1.852);       // Traccar dà la velocità in nodi
+    const vecchia = eta > VECCHIA; if (!vecchia) tutteVecchie = false;
+    const qui = vicinoA(p);
+    r.querySelector('.stato').textContent = (vecchia ? 'Ultima posizione nota' : (kmh >= 5 ? 'In viaggio · ' + kmh + ' km/h' : 'Fermo')) + (qui ? ' · ' + qui : '');
+    r.querySelector('.dettaglio').textContent = 'Aggiornata alle ' + ora(quando) + ' · ' + quanto(eta);
+    r.classList.toggle('ferma', vecchia);
+    r.querySelector('.avviso').textContent = vecchia ? 'Il telefono a bordo non invia la posizione da ' + quanto(eta).replace(' fa', '') + ': il bus potrebbe essere altrove.' : '';
+  }
+  if (bus.size) $('scheda').classList.toggle('ferma', tutteVecchie);
 }
 
 leggiServizio(); aggiorna();
 setInterval(aggiorna, OGNI);
 setInterval(leggiServizio, 60000);
-setInterval(() => scrivi(posizioneVista), 1000);   // «12 secondi fa» che scorre fra un aggiornamento e l'altro
+setInterval(() => { if (bus.size) scrivi(); }, 1000);   // «12 secondi fa» che scorre fra un aggiornamento e l'altro
 </script>
 </body>
 </html>

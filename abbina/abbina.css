@@ -49,3 +49,11 @@ td button { padding:5px 10px; font-size:.9rem; }
 .elenco-linee a { display:block; background:#fff; border:1px solid var(--line); border-left:8px solid var(--c); padding:14px 18px; margin:0 0 10px;
   color:var(--ink); text-decoration:none; font-size:1.15rem; font-weight:900; }
 .elenco-linee a span { display:block; font-size:.9rem; font-weight:400; color:var(--ink2); }
+/* linee con due bus (una direzione ciascuno): una casella per direzione, nel colore del segnaposto sulla mappa */
+.direzione { border:1px solid var(--line); border-left:6px solid var(--dir, var(--accent)); padding:12px 16px 16px; margin-top:16px; }
+.direzione h4 { margin:0 0 2px; font-size:1.15rem; font-weight:900; color:var(--dir, var(--ink)); }
+.direzione h4:empty { display:none; }
+.riga-id { display:grid; grid-template-columns:1fr auto auto; gap:10px; align-items:end; margin-top:4px; }
+@media (max-width:640px) { .riga-id { grid-template-columns:1fr; } }
+.fascia-linea .dir-testo { display:block; margin-top:4px; font-size:1.05rem; font-weight:600; }
+.fascia-linea .dir-testo:empty { display:none; }
