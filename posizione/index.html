@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#18213E">
+<title>Dove si trova il bus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@400;600;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+/* Grafica Busitalia 05_2026: fasce Blu scuro, corpo Talco, Urbanist, niente angoli arrotondati né ombre.
+   Testo secondario #5E5E5D invece del Grigio freddo: la pagina è pubblica e deve restare leggibile (WCAG AA). */
+:root { --bg:#F2F2F2; --surface:#FFFFFF; --band:#18213E; --ink:#3C3C3B; --ink2:#5E5E5D;
+  --accent:#00665B; --alert:#DD052B; --font:'Urbanist', system-ui, sans-serif; }
+* { box-sizing:border-box; }
+html, body { height:100%; margin:0; }
+body { background:var(--bg); color:var(--ink); font:16px/1.5 var(--font); display:flex; flex-direction:column; }
+header { background:var(--band); color:#fff; padding:12px 16px calc(12px) 16px; padding-top:max(12px, env(safe-area-inset-top));
+  display:flex; align-items:center; gap:14px; }
+header img { height:30px; width:auto; display:block; }
+header .titoli { min-width:0; }
+header .occhiello { font-size:.8rem; letter-spacing:.06em; text-transform:uppercase; opacity:.85; font-weight:600; }
+header h1 { margin:0; font-size:1.35rem; font-weight:900; line-height:1.15; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#mappa { flex:1; min-height:240px; background:#dfe3e6; }
+#scheda { background:var(--surface); border-top:4px solid var(--accent); padding:14px 16px;
+  padding-bottom:max(14px, env(safe-area-inset-bottom)); }
+#scheda.ferma { border-top-color:var(--alert); }
+#stato { font-size:1.15rem; font-weight:900; margin:0; }
+#dettaglio { margin:2px 0 0; color:var(--ink2); }
+#avviso { margin:8px 0 0; color:var(--alert); font-weight:600; display:none; }
+.riga { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+button { font:600 1rem var(--font); background:var(--accent); color:#fff; border:0; padding:10px 14px; cursor:pointer; }
+button:focus-visible { outline:3px solid var(--band); outline-offset:2px; }
+footer { background:var(--band) url('../img/piede-scia.jpg') right center / auto 100% no-repeat; color:#fff;
+  font-size:.75rem; padding:6px 16px; }
+#vuoto { position:absolute; inset:0; display:none; align-items:center; justify-content:center; padding:24px;
+  background:var(--bg); z-index:1000; text-align:center; }
+#vuoto div { max-width:420px; }
+#vuoto h2 { margin:0 0 8px; font-size:1.4rem; font-weight:900; }
+main { position:relative; flex:1; display:flex; flex-direction:column; }
+.bus-icona { background:none; border:0; }
+.leaflet-container { font-family:var(--font); }
+.etichetta { font:600 .85rem var(--font); color:var(--band); background:#fff; border:1px solid var(--band); border-radius:0; box-shadow:none; padding:1px 6px; }
+.etichetta::before { display:none; }
+</style>
+</head>
+<body>
+<header>
+  <img src="../img/logo-bianco.png" alt="FS Busitalia">
+  <div class="titoli">
+    <div class="occhiello">Dove si trova il bus</div>
+    <h1 id="servizio">…</h1>
+  </div>
+</header>
+<main>
+  <div id="mappa" role="region" aria-label="Mappa con la posizione del bus"></div>
+  <div id="vuoto" role="status"><div><h2 id="vuoto-titolo">Un momento…</h2><p id="vuoto-testo">Sto cercando il bus.</p></div></div>
+</main>
+<section id="scheda" aria-live="polite">
+  <div class="riga">
+    <div>
+      <p id="stato">Cerco il bus…</p>
+      <p id="dettaglio">&nbsp;</p>
+    </div>
+    <button id="centra" type="button">Centra</button>
+  </div>
+  <p id="avviso"></p>
+</section>
+<footer>Busitalia · posizione aggiornata ogni 5 secondi</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+'use strict';
+// Il QR stampato porta il codice d'accesso della linea dopo il «#» (#t=...): il «#» non viene mai mandato a GitHub.
+// Il codice apre in sola lettura l'utente Traccar della linea, che vede solo il telefono abbinato in quel momento
+// dalla pagina /abbina/. Qui non ci sono credenziali.
+const SERVER = 'https://traccar.fsbusitalia.com';
+const OGNI = 5000;                 // ms fra un aggiornamento e l'altro
+const VECCHIA = 10 * 60 * 1000;    // oltre 10 minuti la posizione si dichiara non aggiornata
+const parametri = new URLSearchParams(location.hash.slice(1));
+const CODICE = parametri.get('t') || '';
+const $ = id => document.getElementById(id);
+
+const mappa = L.map('mappa', { zoomControl: true, attributionControl: true }).setView([45.9, 10.2], 7);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19,
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' }).addTo(mappa);
+const icona = L.divIcon({ className: 'bus-icona', iconSize: [46, 46], iconAnchor: [23, 23], html:
+  '<svg width="46" height="46" viewBox="0 0 46 46" aria-hidden="true"><circle cx="23" cy="23" r="21" fill="#00665B" stroke="#fff" stroke-width="3"/>' +
+  '<g fill="#fff"><rect x="13" y="12" width="20" height="19"/><rect x="15" y="31" width="4" height="4"/><rect x="27" y="31" width="4" height="4"/></g>' +
+  '<g fill="#00665B"><rect x="15" y="14" width="16" height="8"/><circle cx="17" cy="27" r="1.6"/><circle cx="29" cy="27" r="1.6"/></g></svg>' });
+let segnaposto = null, alone = null, seguire = true, primo = true, ultimoId = null;
+mappa.on('dragstart', () => { seguire = false; });
+$('centra').onclick = () => { seguire = true; if (segnaposto) mappa.setView(segnaposto.getLatLng(), Math.max(mappa.getZoom(), 14)); };
+
+function vuoto(titolo, testo) {
+  $('vuoto-titolo').textContent = titolo; $('vuoto-testo').textContent = testo;
+  $('vuoto').style.display = 'flex';
+  $('stato').textContent = titolo; $('dettaglio').textContent = testo; $('avviso').style.display = 'none';
+}
+function ora(d) { return d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit' }); }
+function quanto(ms) {
+  const s = Math.round(ms / 1000);
+  if (s < 60) return s <= 1 ? 'adesso' : s + ' secondi fa';
+  const m = Math.round(s / 60); if (m < 60) return m === 1 ? '1 minuto fa' : m + ' minuti fa';
+  const h = Math.floor(m / 60); return h === 1 ? 'più di un\'ora fa' : 'più di ' + h + ' ore fa';
+}
+async function api(percorso) {
+  const r = await fetch(SERVER + percorso, { headers: { Authorization: 'Bearer ' + CODICE, Accept: 'application/json' }, cache: 'no-store' });
+  if (r.status === 401 || r.status === 403) throw new Error('codice');
+  if (!r.ok) throw new Error('rete');
+  return r.json();
+}
+async function leggiServizio() {
+  // /api/session?token= restituisce l'utente della linea: il nome del servizio sta nei suoi attributi
+  try {
+    const r = await fetch(SERVER + '/api/session?token=' + encodeURIComponent(CODICE), { cache: 'no-store' });
+    if (!r.ok) return;
+    const u = await r.json();
+    const nome = (u.attributes && u.attributes.servizio) || u.name || '';
+    $('servizio').textContent = nome; document.title = 'Dove si trova il bus · ' + nome;
+    linea = (u.email || '').replace(/^qr-/i, '').toLowerCase();
+    await leggiPunti();
+  } catch (e) { /* il nome resta quello di prima */ }
+}
+
+// Punti notevoli della linea: geo aree Traccar con attributo linea=<codice>, collegate all'utente del QR
+let linea = '', punti = [];
+const stratoPunti = L.layerGroup().addTo(mappa);
+async function leggiPunti() {
+  try {
+    const tutte = await api('/api/geofences');
+    punti = [];
+    for (const g of tutte) {
+      if (((g.attributes || {}).linea || '').toLowerCase() !== linea) continue;
+      const m = /CIRCLE\s*\(\s*(-?[\d.]+)\s+(-?[\d.]+)\s*,\s*([\d.]+)\s*\)/i.exec(g.area || '');
+      if (m) punti.push({ nome: g.name.replace(/^.*? · /, ''), lat: +m[1], lon: +m[2], r: +m[3] });
+    }
+    stratoPunti.clearLayers();
+    for (const q of punti) {
+      L.circle([q.lat, q.lon], { radius: q.r, color: '#18213E', weight: 2, fillColor: '#18213E', fillOpacity: .12 }).addTo(stratoPunti);
+      L.circleMarker([q.lat, q.lon], { radius: 5, color: '#fff', weight: 2, fillColor: '#18213E', fillOpacity: 1 })
+        .bindTooltip(q.nome, { permanent: true, direction: 'right', offset: [8, 0], className: 'etichetta' }).addTo(stratoPunti);
+    }
+  } catch (e) { /* i punti sono un di più: senza, la mappa funziona lo stesso */ }
+}
+function vicinoA(p) {
+  const metri = (a, b, c, d) => { const R = 6371000, x = (d - b) * Math.PI / 180 * Math.cos((a + c) / 2 * Math.PI / 180), y = (c - a) * Math.PI / 180; return R * Math.hypot(x, y); };
+  const dentro = punti.filter(q => metri(p.latitude, p.longitude, q.lat, q.lon) <= q.r);
+  return dentro.length ? dentro[0].nome : '';
+}
+
+let posizioneVista = null;
+async function aggiorna() {
+  if (!CODICE) { vuoto('Codice non valido', 'Il collegamento è incompleto: inquadra di nuovo il codice QR.'); return; }
+  try {
+    const dispositivi = await api('/api/devices');
+    if (!dispositivi.length) {
+      if (segnaposto) { segnaposto.remove(); alone.remove(); segnaposto = null; }
+      vuoto('Nessun bus in condivisione', 'In questo momento la posizione di questa linea non è condivisa. Riprova più tardi.');
+      ultimoId = null; return;
+    }
+    const d = dispositivi[0];
+    if (d.id !== ultimoId) { primo = true; seguire = true; ultimoId = d.id; }
+    const posizioni = await api('/api/positions');
+    const p = posizioni.find(x => x.deviceId === d.id);
+    if (!p) { vuoto('Posizione non ancora disponibile', 'Il telefono a bordo non ha ancora inviato la sua posizione.'); return; }
+    $('vuoto').style.display = 'none';
+    posizioneVista = p; mostra(p);
+  } catch (e) {
+    if (e.message === 'codice') vuoto('Codice non più valido', 'Questo codice QR non è più attivo. Rivolgiti al personale Busitalia.');
+    else { $('avviso').textContent = 'Connessione assente: riprovo fra pochi secondi.'; $('avviso').style.display = 'block'; }
+  }
+}
+function mostra(p) {
+  const dove = [p.latitude, p.longitude];
+  if (!segnaposto) {
+    alone = L.circle(dove, { radius: Math.max(p.accuracy || 0, 15), color: '#00665B', weight: 1, fillOpacity: .12 }).addTo(mappa);
+    segnaposto = L.marker(dove, { icon: icona, keyboard: false, title: 'Il bus' }).addTo(mappa);
+  } else { segnaposto.setLatLng(dove); alone.setLatLng(dove).setRadius(Math.max(p.accuracy || 0, 15)); }
+  if (primo) { mappa.setView(dove, 15); primo = false; } else if (seguire) mappa.panTo(dove, { animate: true });
+  scrivi(p);
+}
+function scrivi(p) {
+  if (!p) return;
+  const quando = new Date(p.fixTime), eta = Date.now() - quando.getTime();
+  const kmh = Math.round((p.speed || 0) * 1.852);       // Traccar dà la velocità in nodi
+  const vecchia = eta > VECCHIA;
+  const qui = vicinoA(p);
+  $('stato').textContent = (vecchia ? 'Ultima posizione nota' : (kmh >= 5 ? 'In viaggio · ' + kmh + ' km/h' : 'Fermo')) + (qui ? ' · ' + qui : '');
+  $('dettaglio').textContent = 'Aggiornata alle ' + ora(quando) + ' · ' + quanto(eta);
+  $('scheda').classList.toggle('ferma', vecchia);
+  $('avviso').textContent = vecchia ? 'Il telefono a bordo non invia la posizione da ' + quanto(eta).replace(' fa', '') + ': il bus potrebbe essere altrove.' : '';
+  $('avviso').style.display = vecchia ? 'block' : 'none';
+}
+
+leggiServizio(); aggiorna();
+setInterval(aggiorna, OGNI);
+setInterval(leggiServizio, 60000);
+setInterval(() => scrivi(posizioneVista), 1000);   // «12 secondi fa» che scorre fra un aggiornamento e l'altro
+</script>
+</body>
+</html>
