@@ -40,8 +40,10 @@ Funziona uguale su Mac e Windows (solo file statici, nessuna compilazione).
 - `abbina/`: l'abbinamento dei telefoni alle linee. Parte comune in `abbina.js` e `abbina.css`; una pagina per linea in
   `abbina/<linea>/`, generata da `modello_linea.html` con `qr_posizione/crea_linea.py` (nome e colore in
   `qr_posizione/linee.json`); `abbina/` elenca le linee ed è la pagina dell'amministratore.
-- `percorsi/<linea>.json`: percorso (una shape per direzione) e fermate della linea dal GTFS, scritti da
-  `qr_posizione/gtfs_percorsi.py` (24/11/2026); li disegnano la mappa pubblica e la mappa di abbinamento.
+- `percorsi/<linea>.json`: percorso (una shape per direzione), fermate, e per ogni direzione fermate con i metri lungo il
+  percorso, corse con gli orari e calendario, dal GTFS, scritti da `qr_posizione/gtfs_percorsi.py` (24/11/2026); li
+  disegnano la mappa pubblica e la mappa di abbinamento, e la mappa pubblica ne ricava i minuti all'arrivo alla fermata
+  scelta dal passeggero («Quanto manca alla tua fermata?»).
 - `img/`: logo bianco e scia del piede (grafica Busitalia 05_2026).
 
 Nessuna credenziale nelle pagine: l'operatore scrive la sua utenza, che resta nella scheda del browser. Dettagli in
