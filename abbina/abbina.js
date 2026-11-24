@@ -8,6 +8,8 @@ const PREFISSO = 'qr-';
 const PAGINA = window.PAGINA_LINEA || null;
 const LINEA = (PAGINA ? PAGINA.codice : (new URLSearchParams(location.search).get('linea') || '')).trim().toLowerCase();
 const $ = s => document.querySelector(s);
+// percorsi e fermate dal GTFS (qr_posizione/gtfs_percorsi.py): link_traccar/percorsi/<codice>.json, accanto ad abbina/
+const PERCORSI = new URL('../percorsi/', document.currentScript.src);
 const CHIAVE = 'abbina_chiave_' + (LINEA || 'tutte');   // ogni pagina di linea ha il suo accesso
 let chiave = sessionStorage.getItem(CHIAVE) || '';
 
@@ -164,12 +166,15 @@ async function scheda(u, punti, codice, op) {
   };
   // ---- punti notevoli: geo aree Traccar con attributo linea=<codice> ----
   const corpo = el.querySelector('.punti');
-  let mappa = null, strato = null;
+  let mappa = null, strato = null, percorso = null;
   el._disegna = () => {
     mappa = L.map(el.querySelector('.mappa')).setView([45.9, 10.2], 7);
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' }).addTo(mappa);
+    mappa.createPane('percorso').style.zIndex = 350;      // sotto i punti notevoli
+    percorso = L.featureGroup().addTo(mappa);
     strato = L.featureGroup().addTo(mappa);
+    disegnaPercorso();
     mappa.on('click', ev => { el.querySelector('.p-coord').value = ev.latlng.lat.toFixed(6) + ', ' + ev.latlng.lng.toFixed(6); });
     elenca();
   };
@@ -188,6 +193,26 @@ async function scheda(u, punti, codice, op) {
                .bindTooltip(tr.cells[0].textContent, { permanent: true, direction: 'top' });
     }
     if (strato.getLayers().length) mappa.fitBounds(strato.getBounds().pad(0.3), { maxZoom: 14 });
+    else if (percorso.getLayers().length) mappa.fitBounds(percorso.getBounds(), { padding: [16, 16] });
+  }
+  async function disegnaPercorso() {
+    try {
+      const r = await fetch(new URL(encodeURIComponent(codice) + '.json', PERCORSI));
+      if (!r.ok) return;
+      const p = await r.json();
+      for (const d of p.direzioni || []) {
+        L.polyline(d.punti, { pane: 'percorso', color: '#fff', weight: 7, opacity: .9, interactive: false }).addTo(percorso);
+        L.polyline(d.punti, { pane: 'percorso', color: '#18213E', weight: 3, opacity: .65, interactive: false }).addTo(percorso);
+      }
+      // clic su una fermata: le sue coordinate vanno nel modulo, per farne un punto notevole
+      for (const f of p.fermate || [])
+        L.circleMarker([f.lat, f.lon], { pane: 'percorso', radius: 5, color: '#18213E', weight: 2, fillColor: '#fff', fillOpacity: 1 })
+          .bindTooltip('Fermata GTFS · ' + f.nome, { direction: 'top' })
+          .on('click', ev => { L.DomEvent.stopPropagation(ev); el.querySelector('.p-coord').value = f.lat.toFixed(6) + ', ' + f.lon.toFixed(6);
+                               if (!el.querySelector('.p-nome').value) el.querySelector('.p-nome').value = f.nome; })
+          .addTo(percorso);
+      if (!strato.getLayers().length) mappa.fitBounds(percorso.getBounds(), { padding: [16, 16] });
+    } catch (e) { /* senza percorso la pagina funziona lo stesso */ }
   }
   const esitoP = el.querySelector('.esito-punti');
   const diciP = (t, ok) => { esitoP.textContent = t; esitoP.className = 'esito esito-punti ' + (ok ? 'ok' : 'errore'); };

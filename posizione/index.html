@@ -52,6 +52,8 @@ main { position:relative; flex:1; display:flex; flex-direction:column; }
 .leaflet-container { font-family:var(--font); }
 .etichetta { font:600 .85rem var(--font); color:var(--band); background:#fff; border:1px solid var(--band); border-radius:0; box-shadow:none; padding:1px 6px; }
 .etichetta::before { display:none; }
+.tutto-percorso { font:600 .85rem var(--font); background:#fff; color:var(--band); border:2px solid rgba(0,0,0,.2); padding:6px 10px; }
+.tutto-percorso:hover { background:#f4f4f4; }
 </style>
 </head>
 <body>
@@ -133,9 +135,42 @@ async function leggiServizio() {
     $('servizio').textContent = nome; document.title = 'Dove si trova il bus · ' + nome;
     try { const v = JSON.parse(at.direzioni || '[]'); direzioni = Array.isArray(v) ? v : []; } catch (e) { direzioni = []; }
     linea = (u.email || '').replace(/^qr-/i, '').toLowerCase();
+    leggiPercorso();
     await leggiPunti();
   } catch (e) { /* il nome resta quello di prima */ }
 }
+
+// Percorso e fermate della linea dal GTFS: ../percorsi/<codice>.json, scritto da qr_posizione/gtfs_percorsi.py.
+// Si disegnano sotto i punti notevoli e sotto i bus; il file si legge una volta sola per linea.
+mappa.createPane('percorso').style.zIndex = 350;      // sotto le geo aree (400) e i bus (600)
+const stratoPercorso = L.featureGroup().addTo(mappa);
+let percorsoDi = '', fermate = [];
+async function leggiPercorso() {
+  if (!linea || percorsoDi === linea) return;
+  percorsoDi = linea;
+  try {
+    const r = await fetch('../percorsi/' + encodeURIComponent(linea) + '.json');
+    if (!r.ok) return;
+    const p = await r.json();
+    stratoPercorso.clearLayers();
+    for (const d of p.direzioni || []) {
+      L.polyline(d.punti, { pane: 'percorso', color: '#fff', weight: 8, opacity: .9, interactive: false }).addTo(stratoPercorso);
+      L.polyline(d.punti, { pane: 'percorso', color: '#18213E', weight: 4, opacity: .65, interactive: false }).addTo(stratoPercorso);
+    }
+    fermate = p.fermate || [];
+    for (const f of fermate)
+      L.circleMarker([f.lat, f.lon], { pane: 'percorso', radius: 6, color: '#18213E', weight: 3, fillColor: '#fff', fillOpacity: 1 })
+        .bindTooltip('Fermata · ' + f.nome, { direction: 'top', offset: [0, -6], className: 'etichetta' }).addTo(stratoPercorso);
+    bottonePercorso.addTo(mappa);
+  } catch (e) { percorsoDi = ''; /* il percorso è un di più: senza, la mappa funziona lo stesso */ }
+}
+const bottonePercorso = L.control({ position: 'topleft' });
+bottonePercorso.onAdd = () => {
+  const b = L.DomUtil.create('button', 'tutto-percorso'); b.type = 'button'; b.textContent = 'Tutto il percorso';
+  L.DomEvent.disableClickPropagation(b);
+  b.onclick = () => { if (stratoPercorso.getLayers().length) { seguire = null; mappa.fitBounds(stratoPercorso.getBounds(), { padding: [24, 24] }); } };
+  return b;
+};
 
 // Punti notevoli della linea: geo aree Traccar con attributo linea=<codice>, collegate all'utente del QR
 let linea = '', punti = [];
@@ -157,10 +192,14 @@ async function leggiPunti() {
     }
   } catch (e) { /* i punti sono un di più: senza, la mappa funziona lo stesso */ }
 }
-function vicinoA(p) {
+function vicinoA(p, fermo) {
   const metri = (a, b, c, d) => { const R = 6371000, x = (d - b) * Math.PI / 180 * Math.cos((a + c) / 2 * Math.PI / 180), y = (c - a) * Math.PI / 180; return R * Math.hypot(x, y); };
   const dentro = punti.filter(q => metri(p.latitude, p.longitude, q.lat, q.lon) <= q.r);
-  return dentro.length ? dentro[0].nome : '';
+  if (dentro.length || !fermo) return dentro.length ? dentro[0].nome : '';
+  // bus fermo: la fermata GTFS entro 150 m, la più vicina (in movimento «fermata X» sembrerebbe una sosta)
+  let meglio = null, dist = 150;
+  for (const f of fermate) { const m = metri(p.latitude, p.longitude, f.lat, f.lon); if (m <= dist) { dist = m; meglio = f; } }
+  return meglio ? 'fermata ' + meglio.nome : '';
 }
 
 async function aggiorna() {
@@ -242,7 +281,7 @@ function scrivi() {
     const quando = new Date(p.fixTime), eta = Date.now() - quando.getTime();
     const kmh = Math.round((p.speed || 0) * 1.852);       // Traccar dà la velocità in nodi
     const vecchia = eta > VECCHIA; if (!vecchia) tutteVecchie = false;
-    const qui = vicinoA(p);
+    const qui = vicinoA(p, kmh < 5);
     r.querySelector('.stato').textContent = (vecchia ? 'Ultima posizione nota' : (kmh >= 5 ? 'In viaggio · ' + kmh + ' km/h' : 'Fermo')) + (qui ? ' · ' + qui : '');
     r.querySelector('.dettaglio').textContent = 'Aggiornata alle ' + ora(quando) + ' · ' + quanto(eta);
     r.classList.toggle('ferma', vecchia);
