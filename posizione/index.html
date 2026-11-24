@@ -52,6 +52,16 @@ main { position:relative; flex:1; display:flex; flex-direction:column; }
 .leaflet-container { font-family:var(--font); }
 .etichetta { font:600 .85rem var(--font); color:var(--band); background:#fff; border:1px solid var(--band); border-radius:0; box-shadow:none; padding:1px 6px; }
 .etichetta::before { display:none; }
+.eta { margin:6px 0 0; font-weight:900; font-size:1.05rem; color:var(--band); background:#EEF3F2; border-left:4px solid var(--accent); padding:3px 8px; }
+.eta:empty { display:none; }
+.eta small { display:block; font-weight:600; color:var(--ink2); }
+#arrivo { background:var(--surface); border-top:1px solid #D9D9D9; padding:8px 16px; }
+#arrivo label { display:block; font-size:.8rem; letter-spacing:.06em; text-transform:uppercase; font-weight:600; color:var(--ink2); }
+#arrivo .r { display:flex; gap:8px; margin-top:4px; }
+#arrivo select { flex:1; min-width:0; font:600 1rem var(--font); color:var(--ink); padding:8px; border:1px solid #9a9a9a; border-radius:0; background:#fff; }
+#arrivo button { background:#fff; color:var(--accent); border:2px solid var(--accent); padding:8px 10px; white-space:nowrap; }
+#arrivo p { margin:4px 0 0; font-size:.85rem; color:var(--ink2); }
+#arrivo p:empty { display:none; }
 .tutto-percorso { font:600 .85rem var(--font); background:#fff; color:var(--band); border:2px solid rgba(0,0,0,.2); padding:6px 10px; }
 .tutto-percorso:hover { background:#f4f4f4; }
 </style>
@@ -68,6 +78,11 @@ main { position:relative; flex:1; display:flex; flex-direction:column; }
   <div id="mappa" role="region" aria-label="Mappa con la posizione del bus"></div>
   <div id="vuoto" role="status"><div><h2 id="vuoto-titolo">Un momento…</h2><p id="vuoto-testo">Sto cercando il bus.</p></div></div>
 </main>
+<section id="arrivo" hidden>
+  <label for="sel-fermata">Quanto manca alla tua fermata?</label>
+  <div class="r"><select id="sel-fermata"><option value="">Scegli la fermata…</option></select><button type="button" id="vicina">Vicina a me</button></div>
+  <p id="esito-vicina" aria-live="polite"></p>
+</section>
 <section id="scheda" aria-live="polite">
   <div class="riga"><div><p class="stato">Cerco il bus…</p><p class="dettaglio">&nbsp;</p></div></div>
 </section>
@@ -105,7 +120,7 @@ mappa.on('dragstart', () => { seguire = null; });
 
 function vuoto(titolo, testo) {
   $('vuoto-titolo').textContent = titolo; $('vuoto-testo').textContent = testo;
-  $('vuoto').style.display = 'flex';
+  $('vuoto').style.display = 'flex'; $('arrivo').hidden = true;
   for (const b of bus.values()) { b.segnaposto.remove(); b.alone.remove(); }
   bus.clear(); firma = ''; primo = true; seguire = 'tutti';
   $('scheda').className = 'vuota';
@@ -144,7 +159,7 @@ async function leggiServizio() {
 // Si disegnano sotto i punti notevoli e sotto i bus; il file si legge una volta sola per linea.
 mappa.createPane('percorso').style.zIndex = 350;      // sotto le geo aree (400) e i bus (600)
 const stratoPercorso = L.featureGroup().addTo(mappa);
-let percorsoDi = '', fermate = [];
+let percorsoDi = '', fermate = [], segni = [];
 async function leggiPercorso() {
   if (!linea || percorsoDi === linea) return;
   percorsoDi = linea;
@@ -158,10 +173,12 @@ async function leggiPercorso() {
       L.polyline(d.punti, { pane: 'percorso', color: '#18213E', weight: 4, opacity: .65, interactive: false }).addTo(stratoPercorso);
     }
     fermate = p.fermate || [];
-    for (const f of fermate)
+    segni = fermate.map((f, i) =>
       L.circleMarker([f.lat, f.lon], { pane: 'percorso', radius: 6, color: '#18213E', weight: 3, fillColor: '#fff', fillOpacity: 1 })
-        .bindTooltip('Fermata · ' + f.nome, { direction: 'top', offset: [0, -6], className: 'etichetta' }).addTo(stratoPercorso);
+        .bindTooltip('Fermata · ' + f.nome, { direction: 'top', offset: [0, -6], className: 'etichetta' })
+        .on('click', () => scegli(i, true)).addTo(stratoPercorso));
     bottonePercorso.addTo(mappa);
+    preparaArrivi(p);
   } catch (e) { percorsoDi = ''; /* il percorso è un di più: senza, la mappa funziona lo stesso */ }
 }
 const bottonePercorso = L.control({ position: 'topleft' });
@@ -171,6 +188,119 @@ bottonePercorso.onAdd = () => {
   b.onclick = () => { if (stratoPercorso.getLayers().length) { seguire = null; mappa.fitBounds(stratoPercorso.getBounds(), { padding: [24, 24] }); } };
   return b;
 };
+
+// ---------- Quanto manca alla tua fermata (24/11/2026) ----------
+// Dal GTFS ogni direzione ha le sue fermate (metri lungo il percorso) e le sue corse (orari). La corsa che il bus sta
+// facendo è quella in cui, secondo l'orario, il bus dovrebbe essere adesso più vicino a dove si trova davvero; la
+// differenza è il ritardo. I minuti alla fermata scelta sono il tempo d'orario che manca dal punto in cui è il bus.
+// La fermata la sceglie il passeggero (elenco o tocco sulla mappa); «Vicina a me» usa la posizione del telefono solo
+// se il passeggero la concede, e solo nel suo browser: non va a nessun server.
+let orario = null, scelta = -1;
+const tracce = new Map();                 // deviceId -> [{t, m:[metri su ogni direzione]}]: in che verso va il bus
+function preparaArrivi(p) {
+  if (!(p.direzioni || []).some(d => (d.corse || []).length)) return;      // GTFS senza orari: niente stima
+  orario = p; orario.giorni = (p.calendari || []).map(c => new Set(c));
+  for (const d of p.direzioni) {
+    d.cum = [0];
+    for (let i = 1; i < d.punti.length; i++) d.cum.push(d.cum[i - 1] + metri(d.punti[i - 1][0], d.punti[i - 1][1], d.punti[i][0], d.punti[i][1]));
+  }
+  // elenco: le fermate nell'ordine della prima direzione, poi quelle che ha solo l'altra
+  const ordine = [];
+  for (const d of p.direzioni) for (const f of d.fermate) if (!ordine.includes(f.f)) ordine.push(f.f);
+  const sel = $('sel-fermata');
+  for (const i of ordine) { const o = document.createElement('option'); o.value = i; o.textContent = fermate[i].nome; sel.appendChild(o); }
+  sel.onchange = () => scegli(sel.value === '' ? -1 : +sel.value, false);
+  const salvata = localStorage.getItem('qr_fermata_' + linea);
+  const k = fermate.findIndex(f => f.nome === salvata);
+  if (k >= 0) scegli(k, false);
+  $('arrivo').hidden = false;
+}
+function scegli(i, dallaMappa) {
+  scelta = i; $('sel-fermata').value = i < 0 ? '' : String(i); $('esito-vicina').textContent = '';
+  segni.forEach((s, k) => s.setStyle(k === i ? { fillColor: '#DD052B', color: '#18213E', radius: 8 } : { fillColor: '#fff', color: '#18213E', radius: 6 }));
+  if (i >= 0) { localStorage.setItem('qr_fermata_' + linea, fermate[i].nome); if (dallaMappa) segni[i].openTooltip(); }
+  else localStorage.removeItem('qr_fermata_' + linea);
+  if (bus.size) scrivi();
+}
+$('vicina').onclick = () => {
+  if (!navigator.geolocation) { $('esito-vicina').textContent = 'Questo telefono non dà la posizione: scegli la fermata dall\'elenco.'; return; }
+  $('esito-vicina').textContent = 'Cerco la fermata più vicina…';
+  navigator.geolocation.getCurrentPosition(g => {
+    let k = -1, dist = Infinity;
+    for (const o of $('sel-fermata').options) if (o.value !== '') {
+      const f = fermate[+o.value], m = metri(g.coords.latitude, g.coords.longitude, f.lat, f.lon);
+      if (m < dist) { dist = m; k = +o.value; }
+    }
+    if (k < 0) return;
+    scegli(k, true);
+    $('esito-vicina').textContent = 'La fermata più vicina a te: ' + fermate[k].nome + ', a ' + (dist < 1000 ? Math.round(dist / 10) * 10 + ' m' : (dist / 1000).toFixed(1).replace('.', ',') + ' km') + '.';
+  }, () => { $('esito-vicina').textContent = 'Posizione non disponibile o non concessa: scegli la fermata dall\'elenco.'; },
+  { enableHighAccuracy: false, timeout: 15000, maximumAge: 120000 });
+};
+function proietta(d, la, lo) {
+  const c = Math.cos(la * Math.PI / 180); let meglio = { m: 0, scarto: Infinity };
+  for (let i = 0; i < d.punti.length - 1; i++) {
+    const ax = (d.punti[i][1] - lo) * c, ay = d.punti[i][0] - la, bx = (d.punti[i + 1][1] - lo) * c, by = d.punti[i + 1][0] - la;
+    const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+    const t = l2 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / l2)) : 0;
+    const s = Math.hypot(ax + t * dx, ay + t * dy) * 111195;
+    if (s < meglio.scarto) meglio = { m: d.cum[i] + t * (d.cum[i + 1] - d.cum[i]), scarto: s };
+  }
+  return meglio;
+}
+function giornoDi(dt) { return dt.getFullYear() + String(dt.getMonth() + 1).padStart(2, '0') + String(dt.getDate()).padStart(2, '0'); }
+function previsto(d, o, m) {           // ora d'orario (s) in cui la corsa o è al metro m del percorso d
+  const mo = r => d.fermate[r[0]].m;
+  if (m <= mo(o[0])) return o[0][2];
+  for (let i = 0; i < o.length - 1; i++) {
+    const a = mo(o[i]), b = mo(o[i + 1]);
+    if (m <= b) return o[i][2] + (b > a ? (m - a) / (b - a) : 1) * (o[i + 1][1] - o[i][2]);
+  }
+  return o[o.length - 1][1];
+}
+function riconosci(id, p) {            // la corsa che il bus sta facendo, o il motivo per cui non si sa
+  if (!orario) return null;
+  const adesso = new Date(), ieri = new Date(adesso.getTime() - 86400000);
+  const sec = adesso.getHours() * 3600 + adesso.getMinutes() * 60 + adesso.getSeconds();
+  const giorni = [[giornoDi(adesso), sec], [giornoDi(ieri), sec + 86400]];          // le corse notturne vanno oltre le 24
+  const proiez = orario.direzioni.map(d => proietta(d, p.latitude, p.longitude));
+  // verso: si confronta con una posizione di almeno 30 s prima
+  const t = new Date(p.fixTime).getTime(), tr = tracce.get(id) || [];
+  if (!tr.length || tr[tr.length - 1].t !== t) { tr.push({ t, m: proiez.map(x => x.m) }); while (tr.length > 30) tr.shift(); tracce.set(id, tr); }
+  const prima = [...tr].reverse().find(x => t - x.t >= 30000);
+  let meglio = null, vicino = false;
+  orario.direzioni.forEach((d, di) => {
+    const pr = proiez[di];
+    if (pr.scarto > 1500) return;                                   // il bus non è su questo percorso
+    vicino = true;
+    if (prima && pr.m - prima.m[di] < -300) return;                 // sta andando nel verso opposto
+    for (const c of d.corse) for (const [g, s] of giorni) {
+      if (!orario.giorni[c.c].has(g)) continue;
+      if (s < c.o[0][2] - 1800 || s > c.o[c.o.length - 1][1] + 5400) continue;   // fuori dalla finestra della corsa
+      const rit = s - previsto(d, c.o, pr.m);
+      if (!meglio || Math.abs(rit) < Math.abs(meglio.rit)) meglio = { d, c, rit, m: pr.m, s };
+    }
+  });
+  if (meglio && Math.abs(meglio.rit) <= 3 * 3600) return meglio;
+  return { motivo: vicino ? 'l\'orario di oggi non prevede una corsa in questo momento' : 'il bus è fuori dal percorso della linea' };
+}
+function hhmm(s) { s = ((Math.round(s / 60) % 1440) + 1440) % 1440; return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0'); }
+function durata(s) { const m = Math.max(1, Math.round(s / 60)); return m < 60 ? m + ' min' : Math.floor(m / 60) + ' h' + (m % 60 ? ' ' + (m % 60) + ' min' : ''); }
+function stima(b, fermo) {             // [testo grande, testo piccolo] per la riga del bus; la fermata si legge nel menu
+  if (scelta < 0 || !b.riconosciuta) return null;
+  const x = b.riconosciuta;
+  if (x.motivo) return ['Stima non disponibile', x.motivo];
+  const k = x.d.fermate.findIndex(f => f.f === scelta), riga = k < 0 ? null : x.c.o.find(r => r[0] === k);
+  if (!riga) return ['Non passa dalla tua fermata', 'questo bus va verso ' + x.d.verso];
+  const mf = x.d.fermate[k].m;
+  if (mf < x.m - 200) return ['Già passato dalla tua fermata', 'orario di passaggio ' + hhmm(riga[1])];
+  if (Math.abs(mf - x.m) <= 200 && fermo) return ['È alla tua fermata', 'partenza prevista alle ' + hhmm(riga[2])];
+  // davanti al capolinea prima della partenza si conta dall'ora di partenza; in viaggio, dal punto in cui è il bus
+  const manca = x.rit < 0 && x.m <= x.d.fermate[x.c.o[0][0]].m + 300 ? riga[1] - x.s : riga[1] - previsto(x.d, x.c.o, x.m);
+  const r = Math.round(x.rit / 60);
+  return ['Arriva fra circa ' + durata(manca),
+          'orario ' + hhmm(riga[1]) + ' · ' + (r >= 2 ? 'in ritardo di ' + r + ' min' : r <= -2 ? 'in anticipo di ' + (-r) + ' min' : 'in orario')];
+}
 
 // Punti notevoli della linea: geo aree Traccar con attributo linea=<codice>, collegate all'utente del QR
 let linea = '', punti = [];
@@ -192,8 +322,8 @@ async function leggiPunti() {
     }
   } catch (e) { /* i punti sono un di più: senza, la mappa funziona lo stesso */ }
 }
+function metri(a, b, c, d) { const R = 6371000, x = (d - b) * Math.PI / 180 * Math.cos((a + c) / 2 * Math.PI / 180), y = (c - a) * Math.PI / 180; return R * Math.hypot(x, y); }
 function vicinoA(p, fermo) {
-  const metri = (a, b, c, d) => { const R = 6371000, x = (d - b) * Math.PI / 180 * Math.cos((a + c) / 2 * Math.PI / 180), y = (c - a) * Math.PI / 180; return R * Math.hypot(x, y); };
   const dentro = punti.filter(q => metri(p.latitude, p.longitude, q.lat, q.lon) <= q.r);
   if (dentro.length || !fermo) return dentro.length ? dentro[0].nome : '';
   // bus fermo: la fermata GTFS entro 150 m, la più vicina (in movimento «fermata X» sembrerebbe una sosta)
@@ -234,8 +364,9 @@ async function aggiorna() {
         if (nome && ordine.length > 1) b.segnaposto.bindTooltip(nome, { permanent: true, direction: 'top', offset: [0, -22], className: 'etichetta' });
       }
     });
+    for (const [id, b] of bus) b.riconosciuta = b.posizione && Date.now() - new Date(b.posizione.fixTime) <= VECCHIA ? riconosci(id, b.posizione) : null;
     if (!bus.size) { vuoto('Posizione non ancora disponibile', 'Il telefono a bordo non ha ancora inviato la sua posizione.'); return; }
-    $('vuoto').style.display = 'none';
+    $('vuoto').style.display = 'none'; if (orario) $('arrivo').hidden = false;
     if (nuovaFirma !== firma) { firma = nuovaFirma; costruisciScheda(ordine.map(o => o.d.id)); primo = true; seguire = 'tutti'; }
     inquadra();
     scrivi();
@@ -261,7 +392,7 @@ function costruisciScheda(ids) {
   $('scheda').innerHTML = '';
   for (const id of ids) {
     const r = document.createElement('div'); r.className = 'riga'; r.dataset.id = id;
-    r.innerHTML = '<div><p class="dir"><i></i><span></span></p><p class="stato"></p><p class="dettaglio"></p><p class="avviso"></p></div><button type="button">Centra</button>';
+    r.innerHTML = '<div><p class="dir"><i></i><span></span></p><p class="stato"></p><p class="dettaglio"></p><p class="avviso"></p><p class="eta"></p></div><button type="button">Centra</button>';
     r.querySelector('button').onclick = () => {
       const b = bus.get(id); if (!b || !b.posizione) return;
       seguire = multi ? id : 'tutti'; mappa.setView([b.posizione.latitude, b.posizione.longitude], Math.max(mappa.getZoom(), 14));
@@ -285,6 +416,8 @@ function scrivi() {
     r.querySelector('.stato').textContent = (vecchia ? 'Ultima posizione nota' : (kmh >= 5 ? 'In viaggio · ' + kmh + ' km/h' : 'Fermo')) + (qui ? ' · ' + qui : '');
     r.querySelector('.dettaglio').textContent = 'Aggiornata alle ' + ora(quando) + ' · ' + quanto(eta);
     r.classList.toggle('ferma', vecchia);
+    const e = vecchia ? null : stima(b, kmh < 5), el = r.querySelector('.eta');
+    el.textContent = ''; if (e) { el.append(e[0]); const sm = document.createElement('small'); sm.textContent = e[1]; el.append(sm); }
     r.querySelector('.avviso').textContent = vecchia ? 'Il telefono a bordo non invia la posizione da ' + quanto(eta).replace(' fa', '') + ': il bus potrebbe essere altrove.' : '';
   }
   if (bus.size) $('scheda').classList.toggle('ferma', tutteVecchie);
