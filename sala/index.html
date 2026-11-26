@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="strict-origin">
+<meta name="theme-color" content="#18213E">
+<title>Sala operativa · bus delle linee QR</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@400;600;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+/* Sala operativa (26/11/2026): tutte le linee del QR posizione su una mappa, in sola lettura.
+   Grafica Busitalia 05_2026 come la mappa pubblica: fasce Blu scuro, corpo Talco, Urbanist, niente angoli arrotondati. */
+:root { --bg:#F2F2F2; --surface:#FFFFFF; --band:#18213E; --ink:#3C3C3B; --ink2:#5E5E5D; --line:#D9D9D9;
+  --accent:#00665B; --alert:#DD052B; --warn:#8A5A00; --font:'Urbanist', system-ui, sans-serif; }
+* { box-sizing:border-box; }
+html, body { height:100%; margin:0; }
+body { background:var(--bg); color:var(--ink); font:15px/1.45 var(--font); display:flex; flex-direction:column; }
+header { background:var(--band); color:#fff; padding:10px 16px; display:flex; align-items:center; gap:14px; }
+header img { height:28px; width:auto; display:block; }
+header .occhiello { font-size:.78rem; letter-spacing:.06em; text-transform:uppercase; opacity:.85; font-weight:600; }
+header h1 { margin:0; font-size:1.3rem; font-weight:900; line-height:1.15; }
+header .ora { margin-left:auto; text-align:right; font-size:.85rem; opacity:.9; white-space:nowrap; }
+header .ora b { display:block; font-size:1.25rem; font-weight:900; }
+main { flex:1; display:flex; min-height:0; }
+#elenco { width:400px; flex:none; overflow-y:auto; background:var(--surface); border-right:1px solid var(--line); }
+#mappa { flex:1; min-height:300px; background:#dfe3e6; }
+.linea { border-left:8px solid var(--c); border-bottom:1px solid var(--line); }
+.linea h2 { margin:0; padding:10px 12px 4px; font-size:1.05rem; font-weight:900; display:flex; align-items:center; gap:8px; cursor:pointer; }
+.linea h2 span { flex:1; }
+.linea h2 small { font-weight:600; color:var(--ink2); font-size:.8rem; }
+.linea .msg { margin:0; padding:0 12px 10px; color:var(--ink2); }
+.linea .msg.err { color:var(--alert); font-weight:600; }
+.bus { padding:6px 12px 10px; display:grid; grid-template-columns:1fr auto; gap:2px 10px; align-items:start; }
+.bus + .bus { border-top:1px dashed var(--line); }
+.bus .dir { font-weight:900; color:var(--band); }
+.bus .stato { font-weight:600; }
+.bus .stato.ferma { color:var(--alert); }
+.bus .det { color:var(--ink2); font-size:.86rem; grid-column:1; }
+.bus .rit { grid-column:1; font-weight:900; font-size:.9rem; }
+.bus .rit.ok { color:var(--accent); } .bus .rit.tardi { color:var(--alert); } .bus .rit.neutro { color:var(--ink2); font-weight:600; }
+.bus button { grid-row:1 / span 3; grid-column:2; align-self:center; }
+button { font:600 .9rem var(--font); background:var(--accent); color:#fff; border:0; padding:7px 12px; cursor:pointer; }
+button:focus-visible, .linea h2:focus-visible { outline:3px solid var(--band); outline-offset:2px; }
+.barra { display:flex; gap:8px; padding:10px 12px; border-bottom:1px solid var(--line); background:#fafafa; position:sticky; top:0; z-index:2; }
+.barra button.sec { background:#fff; color:var(--band); border:2px solid var(--band); padding:5px 10px; }
+.legenda { padding:10px 12px; color:var(--ink2); font-size:.8rem; }
+footer { background:var(--band) url('../img/piede-scia.jpg') right center / auto 100% no-repeat; color:#fff; font-size:.75rem; padding:6px 16px; }
+.bus-icona { background:none; border:0; }
+.leaflet-container { font-family:var(--font); }
+.etichetta { font:600 .8rem var(--font); color:var(--band); background:#fff; border:2px solid var(--c, #18213E); border-radius:0; box-shadow:none; padding:1px 6px; }
+.etichetta::before { display:none; }
+#vuoto { margin:24px 16px; }
+@media (max-width: 800px) {
+  main { flex-direction:column-reverse; }
+  #elenco { width:auto; max-height:55vh; border-right:0; border-top:1px solid var(--line); }
+  #mappa { min-height:45vh; }
+  header .ora { display:none; }
+}
+</style>
+</head>
+<body>
+<header>
+  <img src="../img/logo-bianco.png" alt="FS Busitalia">
+  <div>
+    <div class="occhiello">Sala operativa · sola lettura</div>
+    <h1>Bus delle linee QR</h1>
+  </div>
+  <div class="ora"><b id="orologio">--:--</b>aggiornamento ogni 5 secondi</div>
+</header>
+<main>
+  <section id="elenco" aria-label="Linee e bus">
+    <div class="barra"><button type="button" class="sec" id="tutte">Tutte le linee</button><button type="button" class="sec" id="percorsi">Nascondi percorsi</button></div>
+    <div id="linee"></div>
+    <p class="legenda">Ritardo stimato dall'orario della linea (GTFS) e dalla posizione del telefono di bordo. Posizione «non aggiornata»: nessun invio da oltre 10 minuti. La pagina non può abbinare né interrompere: si fa dalle pagine di abbinamento.</p>
+  </section>
+  <div id="mappa" role="region" aria-label="Mappa dei bus di tutte le linee"></div>
+</main>
+<footer>Busitalia · sala operativa · i codici delle linee stanno solo nel collegamento: non inoltrarlo</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+'use strict';
+// Il collegamento porta dopo il «#» il codice d'accesso (in sola lettura) di ogni linea: #<linea>=<codice>&<linea>=<codice>…
+// Sono gli stessi codici dei QR stampati: il «#» non arriva mai a GitHub. Lo scrive qr_posizione/crea_sala.py.
+// Nomi e colori delle linee stanno in linee.json (pubblico); percorsi e orari in ../percorsi/<linea>.json.
+const SERVER = 'https://traccar.fsbusitalia.com';
+const OGNI = 5000, VECCHIA = 10 * 60 * 1000;
+const $ = id => document.getElementById(id);
+const CODICI = Object.fromEntries(new URLSearchParams(location.hash.slice(1)));
+
+const mappa = L.map('mappa', { zoomControl: true }).setView([43.5, 12.0], 6);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19,
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' }).addTo(mappa);
+mappa.createPane('percorso').style.zIndex = 350;
+const icona = (c, seconda) => L.divIcon({ className: 'bus-icona', iconSize: [40, 40], iconAnchor: [20, 20], html:
+  `<svg width="40" height="40" viewBox="0 0 46 46" aria-hidden="true"><circle cx="23" cy="23" r="21" fill="${seconda ? '#fff' : c}" stroke="${seconda ? c : '#fff'}" stroke-width="${seconda ? 5 : 3}"/>` +
+  `<g fill="${seconda ? c : '#fff'}"><rect x="13" y="12" width="20" height="19"/><rect x="15" y="31" width="4" height="4"/><rect x="27" y="31" width="4" height="4"/></g>` +
+  `<g fill="${seconda ? '#fff' : c}"><rect x="15" y="14" width="16" height="8"/><circle cx="17" cy="27" r="1.6"/><circle cx="29" cy="27" r="1.6"/></g></svg>` });
+
+function ora(d) { return d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit' }); }
+function quanto(ms) {
+  const s = Math.round(ms / 1000);
+  if (s < 60) return s <= 1 ? 'adesso' : s + ' s fa';
+  const m = Math.round(s / 60); if (m < 60) return m + ' min fa';
+  const h = Math.floor(m / 60); return 'più di ' + h + (h === 1 ? ' ora' : ' ore') + ' fa';
+}
+function metri(a, b, c, d) { const R = 6371000, x = (d - b) * Math.PI / 180 * Math.cos((a + c) / 2 * Math.PI / 180), y = (c - a) * Math.PI / 180; return R * Math.hypot(x, y); }
+function testo(el, t) { el.textContent = t; return el; }
+
+// ---------- ritardo rispetto all'orario: stesso metodo della mappa pubblica (posizione/index.html) ----------
+function preparaOrario(p) {
+  if (!(p.direzioni || []).some(d => (d.corse || []).length)) return null;
+  p.giorni = (p.calendari || []).map(c => new Set(c));
+  for (const d of p.direzioni) {
+    d.cum = [0];
+    for (let i = 1; i < d.punti.length; i++) d.cum.push(d.cum[i - 1] + metri(d.punti[i - 1][0], d.punti[i - 1][1], d.punti[i][0], d.punti[i][1]));
+  }
+  return p;
+}
+function proietta(d, la, lo) {
+  const c = Math.cos(la * Math.PI / 180); let meglio = { m: 0, scarto: Infinity };
+  for (let i = 0; i < d.punti.length - 1; i++) {
+    const ax = (d.punti[i][1] - lo) * c, ay = d.punti[i][0] - la, bx = (d.punti[i + 1][1] - lo) * c, by = d.punti[i + 1][0] - la;
+    const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+    const t = l2 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / l2)) : 0;
+    const s = Math.hypot(ax + t * dx, ay + t * dy) * 111195;
+    if (s < meglio.scarto) meglio = { m: d.cum[i] + t * (d.cum[i + 1] - d.cum[i]), scarto: s };
+  }
+  return meglio;
+}
+function giornoDi(dt) { return dt.getFullYear() + String(dt.getMonth() + 1).padStart(2, '0') + String(dt.getDate()).padStart(2, '0'); }
+function previsto(d, o, m) {
+  const mo = r => d.fermate[r[0]].m;
+  if (m <= mo(o[0])) return o[0][2];
+  for (let i = 0; i < o.length - 1; i++) { const a = mo(o[i]), b = mo(o[i + 1]); if (m <= b) return o[i][2] + (b > a ? (m - a) / (b - a) : 1) * (o[i + 1][1] - o[i][2]); }
+  return o[o.length - 1][1];
+}
+function hhmm(s) { s = ((Math.round(s / 60) % 1440) + 1440) % 1440; return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0'); }
+function riconosci(L_, id, p) {
+  const orario = L_.orario; if (!orario) return null;
+  const adesso = new Date(), ieri = new Date(adesso.getTime() - 86400000);
+  const sec = adesso.getHours() * 3600 + adesso.getMinutes() * 60 + adesso.getSeconds();
+  const giorni = [[giornoDi(adesso), sec], [giornoDi(ieri), sec + 86400]];
+  const proiez = orario.direzioni.map(d => proietta(d, p.latitude, p.longitude));
+  const t = new Date(p.fixTime).getTime(), tr = L_.tracce.get(id) || [];
+  if (!tr.length || tr[tr.length - 1].t !== t) { tr.push({ t, m: proiez.map(x => x.m) }); while (tr.length > 30) tr.shift(); L_.tracce.set(id, tr); }
+  const prima = [...tr].reverse().find(x => t - x.t >= 30000);
+  let meglio = null, vicino = false;
+  orario.direzioni.forEach((d, di) => {
+    const pr = proiez[di];
+    if (pr.scarto > 1500) return;
+    vicino = true;
+    if (prima && pr.m - prima.m[di] < -300) return;
+    for (const c of d.corse) for (const [g, s] of giorni) {
+      if (!orario.giorni[c.c].has(g)) continue;
+      if (s < c.o[0][2] - 1800 || s > c.o[c.o.length - 1][1] + 5400) continue;
+      const rit = s - previsto(d, c.o, pr.m);
+      if (!meglio || Math.abs(rit) < Math.abs(meglio.rit)) meglio = { d, c, rit };
+    }
+  });
+  if (meglio && Math.abs(meglio.rit) <= 3 * 3600) return meglio;
+  return { motivo: vicino ? 'nessuna corsa d\'orario adesso' : 'fuori dal percorso della linea' };
+}
+
+// ---------- le linee ----------
+const linee = [];                       // {codice, nome, colore, el, direzioni, bus: Map, orario, tracce, strato}
+const stratoPercorsi = L.featureGroup().addTo(mappa);
+let seguire = 'tutte', primo = true;
+mappa.on('dragstart', () => { seguire = null; });
+
+async function api(L_, percorso) {
+  const r = await fetch(SERVER + percorso, { headers: { Authorization: 'Bearer ' + CODICI[L_.codice], Accept: 'application/json' }, cache: 'no-store' });
+  if (r.status === 401 || r.status === 403) throw new Error('codice');
+  if (!r.ok) throw new Error('rete');
+  return r.json();
+}
+async function leggiServizio(L_) {
+  try {
+    const r = await fetch(SERVER + '/api/session?token=' + encodeURIComponent(CODICI[L_.codice]), { cache: 'no-store', credentials: 'omit' });
+    if (!r.ok) return;
+    const at = (await r.json()).attributes || {};
+    if (at.servizio) { L_.nome = at.servizio; L_.el.querySelector('h2 span').textContent = at.servizio; }
+    try { const v = JSON.parse(at.direzioni || '[]'); L_.direzioni = Array.isArray(v) ? v : []; } catch (e) { L_.direzioni = []; }
+  } catch (e) { /* restano i dati di prima */ }
+}
+async function leggiPercorso(L_) {
+  try {
+    const r = await fetch('../percorsi/' + encodeURIComponent(L_.codice) + '.json');
+    if (!r.ok) return;
+    const p = await r.json();
+    for (const d of p.direzioni || []) {
+      L.polyline(d.punti, { pane: 'percorso', color: '#fff', weight: 7, opacity: .9, interactive: false }).addTo(L_.strato);
+      L.polyline(d.punti, { pane: 'percorso', color: L_.colore, weight: 4, opacity: .75, interactive: false }).addTo(L_.strato);
+    }
+    for (const f of p.fermate || [])
+      L.circleMarker([f.lat, f.lon], { pane: 'percorso', radius: 4, color: L_.colore, weight: 2, fillColor: '#fff', fillOpacity: 1 })
+        .bindTooltip(L_.nome + ' · fermata ' + f.nome, { direction: 'top', className: 'etichetta' }).addTo(L_.strato);
+    L_.orario = preparaOrario(p);
+  } catch (e) { /* senza percorso la linea si vede lo stesso */ }
+}
+
+function messaggio(L_, t, errore) {
+  const m = L_.el.querySelector('.msg'); m.textContent = t; m.className = 'msg' + (errore ? ' err' : ''); m.hidden = !t;
+}
+async function aggiornaLinea(L_) {
+  try {
+    const dispositivi = await api(L_, '/api/devices');
+    const firma = dispositivi.map(d => d.id).sort().join(',');
+    if (firma !== L_.firma) { await leggiServizio(L_); }
+    const posizioni = dispositivi.length ? await api(L_, '/api/positions') : [];
+    for (const id of [...L_.bus.keys()]) if (!dispositivi.some(d => d.id === id)) { L_.bus.get(id).segno.remove(); L_.bus.delete(id); }
+    const ordine = dispositivi.map(d => ({ d, i: L_.direzioni.findIndex(x => +x.deviceId === d.id) }))
+                              .sort((a, b) => (a.i < 0 ? 99 : a.i) - (b.i < 0 ? 99 : b.i));
+    ordine.forEach(({ d, i }, k) => {
+      const nomeDir = i >= 0 ? (L_.direzioni[i].nome || '') : (ordine.length > 1 ? 'Bus ' + (k + 1) : '');
+      const p = posizioni.find(x => x.deviceId === d.id) || null;
+      let b = L_.bus.get(d.id);
+      if (!b && p) {
+        b = { segno: L.marker([p.latitude, p.longitude], { icon: icona(L_.colore, (i < 0 ? k : i) === 1), keyboard: false }).addTo(mappa) };
+        L_.bus.set(d.id, b);
+      }
+      if (b) {
+        Object.assign(b, { posizione: p, nomeDir, ordine: k });
+        if (p) b.segno.setLatLng([p.latitude, p.longitude]);
+        b.riconosciuta = p && Date.now() - new Date(p.fixTime) <= VECCHIA ? riconosci(L_, d.id, p) : null;
+        const et = L_.breve + (nomeDir ? ' · ' + nomeDir : '');
+        if (b.etichetta !== et) {
+          b.segno.unbindTooltip().bindTooltip(et, { permanent: true, direction: 'top', offset: [0, -20], className: 'etichetta' });
+          const tt = b.segno.getTooltip(); if (tt && tt.getElement()) tt.getElement().style.setProperty('--c', L_.colore);
+          b.segno.on('tooltipopen', e => e.tooltip.getElement().style.setProperty('--c', L_.colore));
+          b.etichetta = et;
+        }
+      }
+    });
+    L_.firma = firma; L_.errore = '';
+    if (!dispositivi.length) messaggio(L_, 'Nessun bus in condivisione.');
+    else if (!L_.bus.size) messaggio(L_, 'Telefono abbinato, ma nessuna posizione ricevuta.');
+    else messaggio(L_, '');
+  } catch (e) {
+    L_.errore = e.message;
+    messaggio(L_, e.message === 'codice' ? 'Codice della linea non valido: il collegamento va rifatto (crea_sala.py).' : 'Server non raggiungibile: riprovo fra pochi secondi.', true);
+  }
+  scriviLinea(L_);
+}
+function scriviLinea(L_) {
+  const box = L_.el.querySelector('.bus-elenco'); box.innerHTML = '';
+  const lista = [...L_.bus.entries()].sort((a, b) => a[1].ordine - b[1].ordine);
+  L_.el.querySelector('h2 small').textContent = lista.length ? (lista.length === 1 ? '1 bus' : lista.length + ' bus') : '';
+  for (const [id, b] of lista) {
+    const p = b.posizione, r = document.createElement('div'); r.className = 'bus';
+    const sx = document.createElement('div');
+    if (b.nomeDir) { const dv = testo(document.createElement('div'), b.nomeDir); dv.className = 'dir'; sx.append(dv); }
+    const st = document.createElement('div'); st.className = 'stato';
+    const det = document.createElement('div'); det.className = 'det';
+    const rit = document.createElement('div'); rit.className = 'rit';
+    if (!p) { st.textContent = 'Posizione non ancora disponibile'; }
+    else {
+      const quando = new Date(p.fixTime), eta = Date.now() - quando.getTime(), kmh = Math.round((p.speed || 0) * 1.852);
+      const vecchia = eta > VECCHIA;
+      st.textContent = vecchia ? 'Posizione non aggiornata' : (kmh >= 5 ? 'In viaggio · ' + kmh + ' km/h' : 'Fermo');
+      st.classList.toggle('ferma', vecchia);
+      det.textContent = 'Ultima posizione alle ' + ora(quando) + ' · ' + quanto(eta);
+      const x = b.riconosciuta;
+      if (x && x.motivo) { rit.textContent = x.motivo; rit.classList.add('neutro'); }
+      else if (x) {
+        const m = Math.round(x.rit / 60), arr = x.c.o[x.c.o.length - 1][1];
+        rit.textContent = (m >= 2 ? 'In ritardo di ' + m + ' min' : m <= -2 ? 'In anticipo di ' + (-m) + ' min' : 'In orario') + ' · verso ' + x.d.verso + ', arrivo d\'orario ' + hhmm(arr);
+        rit.classList.add(m >= 5 ? 'tardi' : 'ok');
+      }
+    }
+    sx.append(st, det); if (rit.textContent) sx.append(rit);
+    const bt = document.createElement('button'); bt.type = 'button'; bt.textContent = 'Centra';
+    bt.onclick = () => { if (!b.posizione) return; seguire = null; mappa.setView([b.posizione.latitude, b.posizione.longitude], 14); };
+    r.append(sx, bt); box.append(r);
+  }
+}
+function inquadra() {
+  if (seguire !== 'tutte') return;
+  const pt = [];
+  for (const L_ of linee) for (const b of L_.bus.values()) if (b.posizione) pt.push([b.posizione.latitude, b.posizione.longitude]);
+  if (pt.length) mappa.fitBounds(L.latLngBounds(pt), { padding: [70, 70], maxZoom: 12, animate: !primo });
+  else if (stratoPercorsi.getLayers().length && primo) mappa.fitBounds(stratoPercorsi.getBounds(), { padding: [30, 30] });
+  primo = false;
+}
+async function giro() {
+  $('orologio').textContent = new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+  await Promise.all(linee.map(aggiornaLinea));
+  inquadra();
+}
+
+async function avvia() {
+  let elenco = [];
+  try { elenco = await (await fetch('linee.json', { cache: 'no-store' })).json(); } catch (e) { elenco = []; }
+  // linee del collegamento: prima quelle di linee.json, nell'ordine del file; poi quelle che il file non conosce
+  for (const c of Object.keys(CODICI)) if (!elenco.some(x => x.codice === c)) elenco.push({ codice: c, nome: c, colore: '#18213E' });
+  elenco = elenco.filter(x => CODICI[x.codice]);
+  if (!elenco.length) {
+    $('linee').innerHTML = '<div id="vuoto"><h2>Collegamento incompleto</h2><p>Questa pagina si apre solo dal collegamento della sala operativa, che contiene i codici delle linee.</p></div>';
+    return;
+  }
+  for (const x of elenco) {
+    const el = document.createElement('div'); el.className = 'linea'; el.style.setProperty('--c', x.colore);
+    el.innerHTML = '<h2 tabindex="0" title="Inquadra la linea"><span></span><small></small></h2><p class="msg">Cerco i bus…</p><div class="bus-elenco"></div>';
+    el.querySelector('h2 span').textContent = x.nome;
+    const L_ = { ...x, breve: x.breve || x.nome, el, direzioni: [], bus: new Map(), orario: null, tracce: new Map(), firma: null,
+                 strato: L.featureGroup().addTo(stratoPercorsi) };
+    const inquadraLinea = () => {
+      const g = L.featureGroup([...L_.bus.values()].map(b => b.segno));
+      const bb = L_.strato.getLayers().length ? L_.strato.getBounds() : (g.getLayers().length ? g.getBounds() : null);
+      if (bb) { seguire = null; mappa.fitBounds(bb, { padding: [30, 30] }); }
+    };
+    el.querySelector('h2').onclick = inquadraLinea;
+    el.querySelector('h2').onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); inquadraLinea(); } };
+    $('linee').append(el); linee.push(L_);
+  }
+  await Promise.all(linee.map(leggiPercorso));
+  await giro();
+  setInterval(giro, OGNI);
+  setInterval(() => linee.forEach(scriviLinea), 1000);          // «12 s fa» che scorre
+  setInterval(() => linee.forEach(leggiServizio), 60000);
+}
+$('tutte').onclick = () => { seguire = 'tutte'; primo = true; inquadra(); };
+$('percorsi').onclick = () => {
+  if (mappa.hasLayer(stratoPercorsi)) { stratoPercorsi.remove(); $('percorsi').textContent = 'Mostra percorsi'; }
+  else { stratoPercorsi.addTo(mappa); $('percorsi').textContent = 'Nascondi percorsi'; }
+};
+avvia();
+</script>
+</body>
+</html>

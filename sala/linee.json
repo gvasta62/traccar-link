@@ -1,0 +1,22 @@
+[
+ {
+  "codice": "milano-livigno",
+  "nome": "Milano – Livigno",
+  "colore": "#00665B"
+ },
+ {
+  "codice": "padova-cortina",
+  "nome": "Padova – Cortina",
+  "colore": "#004587"
+ },
+ {
+  "codice": "bergamo",
+  "nome": "Verona – Brescia – Orio al Serio",
+  "colore": "#B91372"
+ },
+ {
+  "codice": "crotone-perugia",
+  "nome": "Crotone – Perugia",
+  "colore": "#1B9AAA"
+ }
+]
