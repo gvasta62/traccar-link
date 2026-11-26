@@ -49,6 +49,8 @@ Funziona uguale su Mac e Windows (solo file statici, nessuna compilazione).
   percorso, corse con gli orari e calendario, dal GTFS, scritti da `qr_posizione/gtfs_percorsi.py` (24/11/2026); li
   disegnano la mappa pubblica e la mappa di abbinamento, e la mappa pubblica ne ricava i minuti all'arrivo alla fermata
   scelta dal passeggero («Quanto manca alla tua fermata?»).
+- `sala/`: la mappa della sala operativa (26/11/2026), tutte le linee insieme in sola lettura; i codici stanno nel
+  collegamento dopo il `#`, scritto da `qr_posizione/crea_sala.py`; `sala/linee.json` ha solo nomi e colori.
 - `img/`: logo bianco e scia del piede (grafica Busitalia 05_2026).
 
 Nessuna credenziale nelle pagine: l'operatore scrive la sua utenza, che resta nella scheda del browser. Dettagli in
