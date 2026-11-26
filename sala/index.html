@@ -40,7 +40,7 @@ main { flex:1; display:flex; min-height:0; }
 .bus .stato.ferma { color:var(--alert); }
 .bus .det { color:var(--ink2); font-size:.86rem; grid-column:1; }
 .bus .rit { grid-column:1; font-weight:900; font-size:.9rem; }
-.bus .rit.ok { color:var(--accent); } .bus .rit.tardi { color:var(--alert); } .bus .rit.neutro { color:var(--ink2); font-weight:600; }
+.bus .rit.ok { color:var(--accent); } .bus .rit.poco { color:var(--warn); } .bus .rit.tardi { color:var(--alert); } .bus .rit.neutro { color:var(--ink2); font-weight:600; }
 .bus button { grid-row:1 / span 3; grid-column:2; align-self:center; }
 button { font:600 .9rem var(--font); background:var(--accent); color:#fff; border:0; padding:7px 12px; cursor:pointer; }
 button:focus-visible, .linea h2:focus-visible { outline:3px solid var(--band); outline-offset:2px; }
@@ -226,9 +226,10 @@ async function aggiornaLinea(L_) {
         Object.assign(b, { posizione: p, nomeDir, ordine: k });
         if (p) b.segno.setLatLng([p.latitude, p.longitude]);
         b.riconosciuta = p && Date.now() - new Date(p.fixTime) <= VECCHIA ? riconosci(L_, d.id, p) : null;
-        const et = L_.breve + (nomeDir ? ' · ' + nomeDir : '');
+        const et = nomeDir && i >= 0 ? nomeDir : L_.breve + (nomeDir ? ' · ' + nomeDir : '');   // la direzione dice gia' la linea
         if (b.etichetta !== et) {
-          b.segno.unbindTooltip().bindTooltip(et, { permanent: true, direction: 'top', offset: [0, -20], className: 'etichetta' });
+          const sotto = (i < 0 ? k : i) === 1;     // il bus di ritorno ha l'etichetta sotto: quando si incrociano non si coprono
+          b.segno.unbindTooltip().bindTooltip(et, { permanent: true, direction: sotto ? 'bottom' : 'top', offset: [0, sotto ? 20 : -20], className: 'etichetta' });
           const tt = b.segno.getTooltip(); if (tt && tt.getElement()) tt.getElement().style.setProperty('--c', L_.colore);
           b.segno.on('tooltipopen', e => e.tooltip.getElement().style.setProperty('--c', L_.colore));
           b.etichetta = et;
@@ -268,7 +269,7 @@ function scriviLinea(L_) {
       else if (x) {
         const m = Math.round(x.rit / 60), arr = x.c.o[x.c.o.length - 1][1];
         rit.textContent = (m >= 2 ? 'In ritardo di ' + m + ' min' : m <= -2 ? 'In anticipo di ' + (-m) + ' min' : 'In orario') + ' · verso ' + x.d.verso + ', arrivo d\'orario ' + hhmm(arr);
-        rit.classList.add(m >= 5 ? 'tardi' : 'ok');
+        rit.classList.add(m >= 5 ? 'tardi' : m >= 2 ? 'poco' : 'ok');
       }
     }
     sx.append(st, det); if (rit.textContent) sx.append(rit);
