@@ -4,7 +4,12 @@ Tre pagine statiche che aprono Traccar Client sul telefono dell'autista, da mand
 (che rende cliccabili solo i link https). Nate l'11/11/2026 sul modello dei link
 `traccar-auto.vercel.app` di un amico, ma con l'invio **ogni 5 secondi** (la prima versione dell'11/11 era a 5 minuti).
 
-Pubblicate con GitHub Pages dal repository pubblico `gvasta62/traccar-link`:
+Pubblicate con GitHub Pages dal repository pubblico `gvasta62/traccar-link`, **dal 26/11/2026 sul dominio aziendale
+`https://qrbirs.fsbusitalia.com/`** (record DNS CNAME verso `gvasta62.github.io` creato dal collega Caimmi, file `CNAME`
+nel repository, certificato HTTPS di GitHub, «Enforce HTTPS» attivo). Gli indirizzi `gvasta62.github.io/traccar-link/...`
+qui sotto restano validi: rimandano al nuovo dominio, con il `#` (codice dei QR) e senza ristampe.
+Da usare nei messaggi nuovi: `https://qrbirs.fsbusitalia.com/configura/`, `/avvia/`, `/ferma/`.
+Indirizzi originali:
 
 - https://gvasta62.github.io/traccar-link/configura/  (solo la prima volta)
 - https://gvasta62.github.io/traccar-link/avvia/      (prima di partire)
