@@ -54,6 +54,9 @@ Funziona uguale su Mac e Windows (solo file statici, nessuna compilazione).
   `qr_posizione/crea_linea.py`.
 - `sala/`: la mappa della sala operativa (26/11/2026), tutte le linee insieme in sola lettura; i codici stanno nel
   collegamento dopo il `#`, scritto da `qr_posizione/crea_sala.py`; `sala/linee.json` ha solo nomi e colori.
+- `storico/`: **verifica su storico** (28/11/2026), `https://qrbirs.fsbusitalia.com/storico/`: linea e giorno, replay del
+  viaggio da 1x a 20x con l'orario, check-in e check-out alle fermate confrontati con l'orario GTFS. Accesso con l'utenza
+  dell'operatore della linea o di amministratore. Dettagli in `qr_posizione/LEGGIMI.md`.
 - `img/`: logo bianco e scia del piede (grafica Busitalia 05_2026).
 
 Nessuna credenziale nelle pagine: l'operatore scrive la sua utenza, che resta nella scheda del browser. Dettagli in

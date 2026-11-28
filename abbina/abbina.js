@@ -107,6 +107,15 @@ async function scheda(u, punti, codice, op) {
   }
   // dopo ogni modifica: la linea deve vedere esattamente i telefoni delle sue direzioni
   async function applica(nuove, messaggio) {
+    // registro degli abbinamenti per la «verifica su storico» (28/11/2026): [istante, direzione, deviceId o null] a ogni
+    // cambio, nell'attributo «abbinamenti» dell'utente QR (l'operatore non può leggere il registro del server)
+    const fresco = await api('/api/users/' + u.id);
+    const prima = leggiDirezioni(fresco, codice, await api('/api/devices?userId=' + u.id)).dir;
+    let registro = [];
+    try { registro = JSON.parse((fresco.attributes || {}).abbinamenti || '[]'); if (!Array.isArray(registro)) registro = []; } catch (e) { registro = []; }
+    const adesso = new Date().toISOString();
+    nuove.forEach((x, i) => { const p = prima[i] ? prima[i].deviceId : null; if ((x.deviceId ?? null) !== (p ?? null)) registro.push([adesso, i, x.deviceId ?? null]); });
+    registro = registro.slice(-400);
     const tenere = new Set(nuove.map(x => x.deviceId).filter(x => x != null));
     await togliTutto(u, tenere, punti);
     const gia = new Set((await api('/api/devices?userId=' + u.id)).map(d => d.id));
@@ -114,7 +123,7 @@ async function scheda(u, punti, codice, op) {
       if (!gia.has(id)) await api('/api/permissions', 'POST', { userId: u.id, deviceId: id });
       await geoareeAlTelefono(id, punti);
     }
-    await scriviAttributi(u, { servizio: el.querySelector('.servizio').value.trim() || servizio, direzioni: JSON.stringify(nuove) });
+    await scriviAttributi(u, { servizio: el.querySelector('.servizio').value.trim() || servizio, direzioni: JSON.stringify(nuove), abbinamenti: JSON.stringify(registro) });
     const ora = new Set((await api('/api/devices?userId=' + u.id)).map(d => d.id));
     if (ora.size !== tenere.size || [...tenere].some(id => !ora.has(id)))
       throw new Error('Controllo non superato: la linea vede ' + ora.size + ' telefoni invece di ' + tenere.size + '. Riprova.');

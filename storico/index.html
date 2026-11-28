@@ -1,0 +1,487 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="strict-origin">
+<meta name="theme-color" content="#18213E">
+<title>Verifica su storico · linee QR</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@400;600;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+/* Verifica su storico (28/11/2026): il servizio di un giorno passato su una linea QR, rivisto in replay da 1x a 20x,
+   con i passaggi alle fermate (check-in e check-out) confrontati con l'orario GTFS.
+   Grafica Busitalia 05_2026 come la sala operativa: fasce Blu scuro, corpo Talco, Urbanist, niente angoli arrotondati. */
+:root { --bg:#F2F2F2; --surface:#FFFFFF; --band:#18213E; --ink:#3C3C3B; --ink2:#5E5E5D; --line:#D9D9D9;
+  --accent:#00665B; --alert:#DD052B; --warn:#8A5A00; --blue:#004587; --font:'Urbanist', system-ui, sans-serif; }
+* { box-sizing:border-box; }
+[hidden] { display:none !important; }
+html, body { height:100%; margin:0; }
+body { background:var(--bg); color:var(--ink); font:15px/1.45 var(--font); display:flex; flex-direction:column; }
+header { background:var(--band); color:#fff; padding:10px 16px; display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+header img { height:28px; width:auto; display:block; }
+header .occhiello { font-size:.78rem; letter-spacing:.06em; text-transform:uppercase; opacity:.85; font-weight:600; }
+header h1 { margin:0; font-size:1.3rem; font-weight:900; line-height:1.15; }
+header .chi { margin-left:auto; font-size:.85rem; opacity:.9; display:flex; gap:10px; align-items:center; }
+button, select, input { font:600 .95rem var(--font); }
+button { background:var(--accent); color:#fff; border:0; padding:8px 14px; cursor:pointer; }
+button.sec { background:#fff; color:var(--band); border:2px solid var(--band); padding:6px 12px; }
+button:disabled { opacity:.5; cursor:default; }
+button:focus-visible, select:focus-visible, input:focus-visible { outline:3px solid var(--band); outline-offset:2px; }
+select, input { border:1px solid #9a9a9a; background:#fff; color:var(--ink); padding:7px 10px; border-radius:0; }
+label { font-weight:600; font-size:.85rem; color:var(--ink2); display:flex; flex-direction:column; gap:3px; }
+#accesso { max-width:420px; margin:40px auto; background:var(--surface); padding:24px; border-top:8px solid var(--accent); }
+#accesso h2 { margin:0 0 6px; font-weight:900; color:var(--band); }
+#accesso form { display:flex; flex-direction:column; gap:12px; margin-top:14px; }
+.nota { color:var(--ink2); font-size:.88rem; }
+.errore { color:var(--alert); font-weight:600; }
+#lavoro { flex:1; display:flex; flex-direction:column; min-height:0; }
+.scelta { display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap; padding:10px 16px; background:var(--surface); border-bottom:1px solid var(--line); }
+.scelta .esito { flex:1; min-width:220px; font-size:.9rem; }
+main { flex:1; display:flex; min-height:0; }
+#lato { width:470px; flex:none; overflow-y:auto; background:var(--surface); border-right:1px solid var(--line); }
+#destra { flex:1; display:flex; flex-direction:column; min-width:0; }
+#mappa { flex:1; min-height:300px; background:#dfe3e6; }
+.replay { background:var(--band); color:#fff; padding:10px 16px; display:grid; grid-template-columns:auto auto 1fr auto; gap:6px 14px; align-items:center; }
+.replay .orologio { font-size:1.6rem; font-weight:900; font-variant-numeric:tabular-nums; min-width:150px; }
+.replay .data { font-size:.8rem; opacity:.85; display:block; font-weight:600; }
+.replay input[type=range] { width:100%; accent-color:#2fb39f; }
+.replay select { padding:5px 8px; }
+.replay button { background:#fff; color:var(--band); min-width:96px; }
+.replay .vel { display:flex; gap:6px; align-items:center; font-size:.85rem; }
+.blocco { border-bottom:1px solid var(--line); }
+.blocco h3 { margin:0; padding:10px 14px 6px; font-size:1rem; font-weight:900; color:var(--band); border-left:8px solid var(--c, var(--accent)); display:flex; gap:8px; align-items:baseline; }
+.blocco h3 small { font-weight:600; color:var(--ink2); font-size:.8rem; }
+.blocco .sotto { padding:0 14px 8px 22px; color:var(--ink2); font-size:.85rem; }
+table { border-collapse:collapse; width:100%; font-size:.84rem; }
+th { text-align:left; font-weight:700; color:var(--ink2); padding:5px 6px; border-bottom:2px solid var(--line); background:#fafafa; position:sticky; top:0; }
+td { padding:5px 6px; border-bottom:1px solid #ececec; vertical-align:top; font-variant-numeric:tabular-nums; }
+td.f { font-weight:600; color:var(--ink); max-width:170px; }
+tr.passata td { background:#eef6f4; }
+tr.adesso td { background:#d5ece7; }
+tr.adesso td:first-child { box-shadow:inset 5px 0 0 var(--accent); }
+tr { cursor:pointer; }
+.r-ok { color:var(--accent); font-weight:900; } .r-poco { color:var(--warn); font-weight:900; } .r-tardi { color:var(--alert); font-weight:900; }
+.r-prima { color:var(--blue); font-weight:900; } .r-no { color:var(--ink2); }
+.legenda { padding:10px 14px; color:var(--ink2); font-size:.8rem; }
+footer { background:var(--band) url('../img/piede-scia.jpg') right center / auto 100% no-repeat; color:#fff; font-size:.75rem; padding:6px 16px; }
+.bus-icona { background:none; border:0; }
+.leaflet-container { font-family:var(--font); }
+.etichetta { font:600 .78rem var(--font); color:var(--band); background:#fff; border:2px solid var(--c, #18213E); border-radius:0; box-shadow:none; padding:1px 6px; }
+.etichetta::before { display:none; }
+@media (max-width: 900px) {
+  main { flex-direction:column-reverse; }
+  #lato { width:auto; max-height:50vh; border-right:0; border-top:1px solid var(--line); }
+  #mappa { min-height:40vh; }
+  .replay { grid-template-columns:auto 1fr; }
+}
+</style>
+</head>
+<body>
+<header>
+  <img src="../img/logo-bianco.png" alt="Busitalia" onerror="this.hidden=true">
+  <div><div class="occhiello">Linee QR · sola lettura</div><h1>Verifica su storico</h1></div>
+  <div class="chi" id="chi" hidden><span id="chi-nome"></span><button class="sec" id="esci" type="button" style="background:transparent;color:#fff;border-color:#fff">Esci</button></div>
+</header>
+
+<section id="accesso">
+  <h2>Accesso</h2>
+  <p class="nota">Con l'utenza Traccar dell'operatore della linea (op-…) o di amministratore. Resta solo in questa scheda del browser.</p>
+  <form id="modulo-accesso">
+    <label>Utente<input id="posta" autocomplete="username" required></label>
+    <label>Password<input id="parola" type="password" autocomplete="current-password" required></label>
+    <button id="entra">Entra</button>
+    <div id="esito-accesso" class="errore" role="alert"></div>
+  </form>
+</section>
+
+<section id="lavoro" hidden>
+  <form class="scelta" id="modulo-scelta">
+    <label>Linea<select id="linea"></select></label>
+    <label>Giorno<input type="date" id="giorno" required></label>
+    <label>ID telefono (facoltativo)<input id="forza" placeholder="se lo storico degli abbinamenti manca" size="22"></label>
+    <button id="carica">Carica il servizio</button>
+    <div class="esito" id="esito" role="status"></div>
+  </form>
+  <main>
+    <div id="lato"><p class="legenda">Scegli la linea e il giorno, poi «Carica il servizio».</p></div>
+    <div id="destra">
+      <div id="mappa"></div>
+      <div class="replay" id="replay" hidden>
+        <button type="button" id="play">▶ Avvia</button>
+        <div class="orologio" id="orologio">--:--:--<span class="data" id="data"></span></div>
+        <input type="range" id="tempo" min="0" max="1000" step="1" value="0" aria-label="Momento del viaggio">
+        <div class="vel"><label style="color:#fff;flex-direction:row;align-items:center;gap:6px">Velocità
+          <select id="velocita"><option value="1">1x</option><option value="2">2x</option><option value="5">5x</option><option value="10" selected>10x</option><option value="20">20x</option></select></label></div>
+      </div>
+    </div>
+  </main>
+</section>
+<footer>Busitalia · verifica su storico · posizioni del telefono di bordo registrate da Traccar</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+'use strict';
+const SERVER = 'https://traccar.fsbusitalia.com';
+const RAGGIO = 150;                 // metri: dentro questo raggio da una fermata il bus è «alla fermata» (come la mappa pubblica)
+const BUCO = 15 * 60;               // s: due posizioni più distanti di così spezzano la sosta
+const FINESTRA_ABB = 120;           // giorni di registro degli abbinamenti letti prima del giorno scelto
+const COLORI = ['#00665B', '#004587', '#B91372', '#1B9AAA'];
+const $ = s => document.querySelector(s);
+const CHIAVE = 'storico_chiave';
+let chiave = sessionStorage.getItem(CHIAVE) || '';
+let LINEE = [], utenti = [];
+
+async function api(percorso) {
+  const r = await fetch(SERVER + percorso, { cache: 'no-store', headers: { Authorization: 'Basic ' + chiave, Accept: 'application/json' } });
+  if (r.status === 401) throw new Error('Utente o password non validi.');
+  if (!r.ok) { const e = new Error('Il server ha risposto ' + r.status); e.status = r.status; throw e; }
+  const t = await r.text(); return t ? JSON.parse(t) : null;
+}
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const due = n => String(n).padStart(2, '0');
+const hms = d => due(d.getHours()) + ':' + due(d.getMinutes()) + ':' + due(d.getSeconds());
+const hm = d => due(d.getHours()) + ':' + due(d.getMinutes());
+const giornoDi = d => d.getFullYear() + due(d.getMonth() + 1) + due(d.getDate());
+function metri(a, b, c, d) { const R = 6371000, x = (d - b) * Math.PI / 180 * Math.cos((a + c) / 2 * Math.PI / 180), y = (c - a) * Math.PI / 180; return R * Math.hypot(x, y); }
+
+// ---------------------------------------------------------------- accesso
+$('#modulo-accesso').onsubmit = async ev => {
+  ev.preventDefault();
+  chiave = btoa(unescape(encodeURIComponent($('#posta').value.trim() + ':' + $('#parola').value)));
+  $('#entra').disabled = true; $('#esito-accesso').textContent = '';
+  try { await entra(); sessionStorage.setItem(CHIAVE, chiave); }
+  catch (e) { chiave = ''; $('#esito-accesso').textContent = e.message; }
+  finally { $('#entra').disabled = false; }
+};
+$('#esci').onclick = () => { sessionStorage.removeItem(CHIAVE); location.href = location.pathname; };
+
+async function entra() {
+  const io = await api('/api/session?_=' + Date.now()).catch(() => null);   // con l'accesso Basic il server può rispondere 404: la prova vera è /api/users
+  utenti = await api('/api/users');
+  const tutte = await (await fetch('../sala/linee.json', { cache: 'no-store' })).json();
+  LINEE = tutte.filter(l => utenti.some(u => (u.email || '').toLowerCase() === 'qr-' + l.codice));
+  if (!LINEE.length) throw new Error('Con questa utenza non si vede nessuna linea QR.');
+  $('#accesso').hidden = true; $('#lavoro').hidden = false; $('#chi').hidden = false;
+  $('#chi-nome').textContent = io ? (io.name || io.email) : $('#posta').value.trim();
+  $('#linea').innerHTML = LINEE.map(l => '<option value="' + esc(l.codice) + '">' + esc(l.nome) + '</option>').join('');
+  const q = new URLSearchParams(location.search);
+  if (q.get('linea') && LINEE.some(l => l.codice === q.get('linea'))) $('#linea').value = q.get('linea');
+  const ieri = new Date(Date.now() - 86400000);
+  $('#giorno').value = q.get('giorno') || (ieri.getFullYear() + '-' + due(ieri.getMonth() + 1) + '-' + due(ieri.getDate()));
+  $('#giorno').max = new Date().toISOString().slice(0, 10);
+  preparaMappa();
+  if (q.get('giorno')) carica().catch(e => dici(e.message, true));
+}
+
+// ---------------------------------------------------------------- mappa e replay
+let mappa, strati, viaggi = [], t0 = 0, t1 = 0, t = 0, avanti = false, ultimo = 0, righe = [];
+function preparaMappa() {
+  if (mappa) return;
+  mappa = L.map('mappa').setView([44.5, 11], 6);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' }).addTo(mappa);
+  mappa.createPane('percorso').style.zIndex = 350;
+  strati = L.featureGroup().addTo(mappa);
+}
+function icona(c) {
+  return L.divIcon({ className: 'bus-icona', iconSize: [34, 34], iconAnchor: [17, 17], html:
+    '<svg width="34" height="34" viewBox="0 0 34 34"><circle cx="17" cy="17" r="15" fill="' + c + '" stroke="#fff" stroke-width="3"/>' +
+    '<rect x="10" y="9" width="14" height="13" rx="2" fill="none" stroke="#fff" stroke-width="2"/><path d="M10 16h14M13 22v3M21 22v3" stroke="#fff" stroke-width="2"/></svg>' });
+}
+$('#play').onclick = () => { avanti = !avanti; if (avanti && t >= t1) t = t0; $('#play').textContent = avanti ? '❚❚ Pausa' : '▶ Avvia'; ultimo = performance.now(); if (avanti) requestAnimationFrame(passo); };
+$('#tempo').oninput = () => { t = t0 + (t1 - t0) * $('#tempo').value / 1000; disegna(); };
+function passo(ora) {
+  if (!avanti) return;
+  t = Math.min(t1, t + (ora - ultimo) / 1000 * +$('#velocita').value); ultimo = ora;
+  disegna(true);
+  if (t >= t1) { avanti = false; $('#play').textContent = '▶ Avvia'; return; }
+  requestAnimationFrame(passo);
+}
+function dove(v, s) {                 // posizione interpolata del viaggio v all'istante s (secondi epoch), null se fuori
+  const T = v.tempi; if (!T.length || s < T[0] || s > T[T.length - 1]) return null;
+  let a = 0, b = T.length - 1;
+  while (b - a > 1) { const m = (a + b) >> 1; if (T[m] <= s) a = m; else b = m; }
+  const p = v.pos[a], q = v.pos[b], k = T[b] > T[a] ? (s - T[a]) / (T[b] - T[a]) : 0;
+  if (T[b] - T[a] > BUCO) return { la: p.latitude, lo: p.longitude, i: a, vecchia: true };
+  return { la: p.latitude + (q.latitude - p.latitude) * k, lo: p.longitude + (q.longitude - p.longitude) * k, i: a, vel: p.speed * 1.852 };
+}
+function disegna(daPlay) {
+  const d = new Date(t * 1000);
+  $('#orologio').firstChild.textContent = hms(d);
+  $('#data').textContent = d.toLocaleDateString('it-IT', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' });
+  if (daPlay) $('#tempo').value = Math.round((t - t0) / Math.max(1, t1 - t0) * 1000);
+  for (const v of viaggi) {
+    const p = dove(v, t);
+    if (!p) { v.marker.setOpacity(0); v.fatto.setLatLngs([]); continue; }
+    v.marker.setOpacity(1).setLatLng([p.la, p.lo]);
+    v.marker.setTooltipContent(v.etichetta + (p.vel != null ? ' · ' + Math.round(p.vel) + ' km/h' : ''));
+    if (v._i !== p.i) { v._i = p.i; v.fatto.setLatLngs(v.pos.slice(0, p.i + 1).map(x => [x.latitude, x.longitude])); }
+  }
+  // righe della tabella: verde chiaro le fermate già lasciate, evidenziata quella dove il bus è adesso
+  for (const r of righe) {
+    const arrivato = r.dentro != null && r.dentro <= t;
+    r.tr.classList.toggle('adesso', arrivato && (r.fuori == null || r.fuori >= t));
+    r.tr.classList.toggle('passata', arrivato && r.fuori != null && r.fuori < t);
+  }
+}
+
+// ---------------------------------------------------------------- caricamento di un giorno
+$('#modulo-scelta').onsubmit = ev => { ev.preventDefault(); carica().catch(e => dici(e.message, true)); };
+function dici(testo, errore) { $('#esito').textContent = testo; $('#esito').className = 'esito' + (errore ? ' errore' : ''); }
+
+async function carica() {
+  avanti = false; $('#play').textContent = '▶ Avvia';
+  const codice = $('#linea').value, [y, m, g] = $('#giorno').value.split('-').map(Number);
+  const linea = LINEE.find(l => l.codice === codice), qr = utenti.find(u => (u.email || '').toLowerCase() === 'qr-' + codice);
+  history.replaceState(null, '', '?linea=' + encodeURIComponent(codice) + '&giorno=' + $('#giorno').value);
+  $('#carica').disabled = true; dici('Leggo percorso e orari…');
+  try {
+    const perc = await (await fetch('../percorsi/' + encodeURIComponent(codice) + '.json', { cache: 'no-store' })).json().catch(() => null);
+    const g0 = new Date(y, m - 1, g, 0, 0, 0), giorno = giornoDi(g0);
+    // le corse notturne (orari oltre le 24) finiscono il giorno dopo: la finestra si allarga fino a un'ora dopo l'ultimo arrivo
+    let fineOrario = 86400;
+    for (const d of (perc && perc.direzioni) || []) for (const c of d.corse || []) for (const o of c.o) fineOrario = Math.max(fineOrario, o[2] + 3600);
+    const da = g0.getTime() / 1000, a = da + Math.max(86400, fineOrario);
+    // 1. quali telefoni erano abbinati alla linea in quella finestra
+    dici('Cerco i telefoni abbinati alla linea quel giorno…');
+    const { tratti, fonte } = await abbinamenti(qr, da, a);
+    if (!tratti.length) throw new Error('Nessun telefono risulta abbinato a ' + linea.nome + ' quel giorno. Se sai quale era, scrivi il suo ID nel campo «ID telefono».');
+    // 2. le posizioni di ogni telefono nei suoi tratti, e i passaggi dai punti notevoli (geo aree Traccar)
+    const geo = await api('/api/geofences?userId=' + qr.id).catch(() => []);
+    const nomiGeo = new Map(geo.map(x => [x.id, x.name.replace(/^.*? · /, '')]));
+    viaggi.forEach(v => { v.marker.remove(); v.fatto.remove(); v.tutto.remove(); }); viaggi = [];
+    strati.clearLayers();
+    let n = 0;
+    for (const tr of tratti) {
+      dici('Leggo le posizioni del telefono ' + tr.dev.uniqueId + '…');
+      const q = 'deviceId=' + tr.dev.id + '&from=' + new Date(tr.da * 1000).toISOString() + '&to=' + new Date(tr.a * 1000).toISOString();
+      const pos = (await api('/api/reports/route?' + q)).filter(p => p.valid !== false).sort((p, q) => p.fixTime < q.fixTime ? -1 : 1);
+      const ev = await api('/api/reports/events?' + q + '&type=geofenceEnter&type=geofenceExit').catch(() => []);
+      if (!pos.length) continue;
+      const c = COLORI[n++ % COLORI.length];
+      const v = { dev: tr.dev, pos, tempi: pos.map(p => Date.parse(p.fixTime) / 1000), colore: c, eventi: ev, etichetta: tr.dev.name };
+      v.tutto = L.polyline(pos.map(p => [p.latitude, p.longitude]), { color: c, weight: 3, opacity: .35 }).addTo(mappa);
+      v.fatto = L.polyline([], { color: c, weight: 5, opacity: .9 }).addTo(mappa);
+      v.marker = L.marker([pos[0].latitude, pos[0].longitude], { icon: icona(c), zIndexOffset: 1000 }).addTo(mappa)
+        .bindTooltip(v.etichetta, { permanent: true, direction: 'right', offset: [16, 0], className: 'etichetta' });
+      viaggi.push(v);
+    }
+    if (!viaggi.length) throw new Error('I telefoni abbinati (' + tratti.map(x => x.dev.uniqueId).join(', ') + ') non hanno posizioni registrate in quella finestra.');
+    // 3. percorso e fermate della linea, passaggi e confronto con l'orario
+    const fermate = disegnaLinea(perc);
+    const blocchi = [];
+    for (const v of viaggi) {
+      const visite = soste(v, fermate);
+      const corse = perc ? riconosci(v, visite, perc, giorno, da, nomiDirezioni(qr)) : [];
+      blocchi.push({ v, visite, corse });
+      if (corse.length) { const cc = COLORI_DIR(corse[0].di); v.colore = cc; v.tutto.setStyle({ color: cc }); v.fatto.setStyle({ color: cc }); v.marker.setIcon(icona(cc));
+        v.etichetta = corse[0].nome; v.marker.setTooltipContent(v.etichetta); }
+    }
+    scriviLato(linea, blocchi, fermate, nomiGeo, fonte, tratti);
+    t0 = Math.min(...viaggi.map(v => v.tempi[0])); t1 = Math.max(...viaggi.map(v => v.tempi[v.tempi.length - 1])); t = t0;
+    mappa.fitBounds(L.featureGroup(viaggi.map(v => v.tutto)).getBounds(), { padding: [30, 30] });
+    $('#replay').hidden = false; $('#tempo').value = 0; disegna(); mappa.invalidateSize();
+    dici(viaggi.length + (viaggi.length === 1 ? ' telefono' : ' telefoni') + ' · ' + viaggi.reduce((s, v) => s + v.pos.length, 0).toLocaleString('it-IT') +
+         ' posizioni · dalle ' + hm(new Date(t0 * 1000)) + ' alle ' + hm(new Date(t1 * 1000)) + (t1 - t0 > 86400 ? ' del giorno dopo' : '') + '. Premi ▶ Avvia.');
+  } finally { $('#carica').disabled = false; }
+}
+const COLORI_DIR = i => COLORI[i % COLORI.length];
+
+// Quali telefoni erano abbinati all'utente QR della linea, e quando. Tre fonti, nell'ordine:
+//  1. il registro del server (/api/audit: solo amministratore): «link»/«unlink» del telefono all'utente qr-<linea>;
+//  2. l'attributo «abbinamenti» dell'utente QR, che la pagina di abbinamento scrive dal 28/11/2026 (leggibile dall'operatore);
+//  3. l'ID scritto a mano nel campo «ID telefono» (vale per tutta la giornata).
+async function abbinamenti(qr, da, a) {
+  const forza = $('#forza').value.trim();
+  if (forza) {
+    const d = await api('/api/devices?uniqueId=' + encodeURIComponent(forza));
+    if (!d.length) throw new Error('Nessun telefono con ID ' + forza + ' visibile con questa utenza.');
+    return { tratti: [{ dev: d[0], da, a }], fonte: 'ID scritto a mano (' + forza + '), per tutta la giornata' };
+  }
+  const per = new Map();   // deviceId -> [[inizio, fine], ...]
+  const segna = (id, ev) => { if (!per.has(id)) per.set(id, []); per.get(id).push(ev); };
+  let fonte = '';
+  try {
+    const reg = await api('/api/audit?from=' + new Date((da - FINESTRA_ABB * 86400) * 1000).toISOString() + '&to=' + new Date(a * 1000).toISOString());
+    for (const r of reg) if (r.objectType === 'device' && (r.actionType === 'link' || r.actionType === 'unlink') && r.attributes && r.attributes.ownerType === 'user' && +r.attributes.ownerId === qr.id)
+      segna(r.objectId, [Date.parse(r.actionTime) / 1000, r.actionType === 'link']);
+    fonte = 'registro del server (amministratore)';
+  } catch (e) {
+    let log = [];
+    try { log = JSON.parse((qr.attributes || {}).abbinamenti || '[]'); } catch (x) { log = []; }
+    // [istante ISO, direzione, deviceId o null]: per ogni direzione il telefono resta abbinato fino al cambio successivo
+    const ultimo = new Map();
+    for (const [quando, dir, id] of log.sort((x, y) => x[0] < y[0] ? -1 : 1)) {
+      const s = Date.parse(quando) / 1000, prima = ultimo.get(dir);
+      if (prima != null && prima !== id) segna(prima, [s, false]);
+      if (id != null && prima !== id) segna(id, [s, true]);
+      ultimo.set(dir, id);
+    }
+    fonte = 'registro degli abbinamenti della pagina della linea';
+  }
+  const tratti = [];
+  for (const [id, evs] of per) {
+    evs.sort((x, y) => x[0] - y[0]);
+    let inizio = evs[0][1] ? null : -Infinity;           // il primo evento è un «togli»: era abbinato da prima
+    for (const [s, su] of evs) {
+      if (su && inizio == null) inizio = s;
+      if (!su && inizio != null) { if (s > da && inizio < a) tratti.push({ id, da: Math.max(da, inizio), a: Math.min(a, s) }); inizio = null; }
+    }
+    if (inizio != null && inizio < a) tratti.push({ id, da: Math.max(da, inizio), a });
+  }
+  if (!tratti.length && !per.size) {
+    // nessun registro: si propone l'abbinamento di adesso, dichiarandolo
+    const ora = await api('/api/devices?userId=' + qr.id);
+    for (const d of ora) tratti.push({ id: d.id, da, a });
+    if (tratti.length) fonte = 'nessun registro degli abbinamenti per quel giorno: uso i telefoni abbinati adesso (da verificare)';
+  }
+  const tutti = await api('/api/devices');
+  const out = [];
+  for (const tr of tratti) { const dev = tutti.find(d => d.id === tr.id); if (dev) out.push({ ...tr, dev }); }
+  // un telefono abbinato, tolto e riabbinato nella stessa finestra: i tratti si leggono uno per uno
+  return { tratti: out.filter(x => x.a - x.da > 60), fonte };
+}
+
+function disegnaLinea(perc) {
+  if (!perc) return [];
+  (perc.direzioni || []).forEach((d, i) => L.polyline(d.punti, { color: '#18213E', weight: 3, opacity: .25, dashArray: '6 6', pane: 'percorso' }).addTo(strati));
+  const fermate = (perc.fermate || []).map((f, i) => ({ ...f, i }));
+  for (const f of fermate)
+    f.segno = L.circleMarker([f.lat, f.lon], { radius: 5, color: '#18213E', weight: 2, fillColor: '#fff', fillOpacity: 1, pane: 'percorso' })
+      .bindTooltip(esc(f.nome)).addTo(strati);
+  return fermate;
+}
+
+// Le soste: per ogni fermata, i periodi in cui il telefono è rimasto entro RAGGIO metri (check-in = prima posizione
+// dentro, check-out = ultima posizione dentro). Due posizioni distanti più di BUCO spezzano la sosta.
+function soste(v, fermate) {
+  const out = [];
+  for (const f of fermate) {
+    let dentro = null, ult = null;
+    v.pos.forEach((p, k) => {
+      const s = v.tempi[k], vic = metri(p.latitude, p.longitude, f.lat, f.lon) <= RAGGIO;
+      if (vic) {
+        if (dentro != null && s - ult > BUCO) { out.push({ f: f.i, dentro, fuori: ult }); dentro = null; }
+        if (dentro == null) dentro = s; ult = s;
+      } else if (dentro != null) { out.push({ f: f.i, dentro, fuori: ult }); dentro = null; }
+    });
+    if (dentro != null) out.push({ f: f.i, dentro, fuori: ult });
+  }
+  return out.sort((x, y) => x.dentro - y.dentro);
+}
+
+// Le corse d'orario fatte dal telefono: per ogni corsa del giorno (calendario GTFS) si cerca, fermata per fermata, la sosta
+// più vicina all'orario (entro 3 ore, in avanti nel tempo). Si tengono le corse con almeno metà delle fermate trovate.
+function nomiDirezioni(qr) {
+  try { const d = JSON.parse((qr.attributes || {}).direzioni || '[]'); return Array.isArray(d) ? d.map(x => x.nome || '').filter(Boolean) : []; } catch (e) { return []; }
+}
+function riconosci(v, visite, perc, giorno, base, nomi = []) {
+  const cand = [];
+  (perc.direzioni || []).forEach((d, di) => (d.corse || []).forEach(c => {
+    const cal = (perc.calendari || [])[c.c];
+    if (cal && !cal.includes(giorno)) return;
+    let trovate = 0, scarto = 0, dopo = -Infinity; const righe = [];
+    for (const [k, arr, par] of c.o) {
+      const f = d.fermate[k].f, sArr = base + arr, sPar = base + par;
+      let best = null;
+      for (const x of visite) if (x.f === f && x.dentro >= dopo - 60 && Math.abs(x.dentro - sArr) <= 3 * 3600 && (!best || Math.abs(x.dentro - sArr) < Math.abs(best.dentro - sArr))) best = x;
+      if (best) { trovate++; scarto += Math.abs(best.dentro - sArr); dopo = best.dentro; }
+      righe.push({ f, arr: sArr, par: sPar, dentro: best ? best.dentro : null, fuori: best ? best.fuori : null });
+    }
+    if (trovate >= Math.max(2, Math.ceil(c.o.length / 2)))
+      cand.push({ di, nome: nomi.find(n => d.verso && n.trim().endsWith(d.verso)) || (d.verso ? 'verso ' + d.verso : perc.nome || ''), verso: d.verso, righe, trovate, scarto, inizio: base + c.o[0][2] });
+  }));
+  // le corse scelte non si sovrappongono nel tempo: prima le più complete
+  cand.sort((x, y) => y.trovate - x.trovate || x.scarto - y.scarto);
+  const scelte = [];
+  for (const c of cand) {
+    const lo = Math.min(...c.righe.filter(r => r.dentro != null).map(r => r.dentro)), hi = Math.max(...c.righe.filter(r => r.fuori != null).map(r => r.fuori));
+    if (scelte.some(s => !(hi < s.lo || lo > s.hi))) continue;
+    scelte.push({ ...c, lo, hi });
+  }
+  return scelte.sort((x, y) => x.lo - y.lo);
+}
+
+function ritardo(r) {
+  if (r.dentro == null) return ['non rilevata', 'r-no'];
+  const m = Math.round((r.dentro - r.arr) / 60);
+  if (m < -2) return [m + ' min (in anticipo)', 'r-prima'];
+  if (m <= 2) return [(m > 0 ? '+' : '') + m + ' min', 'r-ok'];
+  return ['+' + m + ' min', m <= 5 ? 'r-poco' : 'r-tardi'];
+}
+const ore = s => s == null ? '–' : hms(new Date(s * 1000));
+const quando = s => { const d = new Date(s * 1000); return due(d.getDate()) + '/' + due(d.getMonth() + 1) + ' ' + hm(d); };
+const oreOrario = s => hm(new Date(s * 1000));
+
+function scriviLato(linea, blocchi, fermate, nomiGeo, fonte, tratti) {
+  const lato = $('#lato'); lato.innerHTML = ''; righe = [];
+  const nomeF = i => (fermate[i] || {}).nome || ('fermata ' + i);
+  const intesta = document.createElement('div'); intesta.className = 'legenda';
+  intesta.innerHTML = '<b style="color:var(--band)">' + esc(linea.nome) + '</b> · ' + esc(new Date($('#giorno').value + 'T12:00').toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })) +
+    '<br>Telefoni: ' + esc(tratti.map(x => x.dev.uniqueId + ' (' + quando(x.da) + ' – ' + quando(x.a) + ')').join(', ')) +
+    '<br>Abbinamenti da: ' + esc(fonte) + '<br>Check-in e check-out: prima e ultima posizione entro ' + RAGGIO + ' m dalla fermata. Ritardo = check-in meno arrivo d\'orario.' +
+    '<br><button type="button" class="sec" id="csv" style="margin-top:8px">Scarica la tabella (CSV)</button>';
+  lato.appendChild(intesta);
+  const csv = [['telefono', 'corsa', 'fermata', 'arrivo orario', 'partenza orario', 'check-in', 'check-out', 'ritardo min']];
+  for (const { v, visite, corse } of blocchi) {
+    if (corse.length) for (const c of corse) {
+      const b = document.createElement('div'); b.className = 'blocco'; b.style.setProperty('--c', COLORI_DIR(c.di));
+      const trov = c.righe.filter(r => r.dentro != null).length;
+      b.innerHTML = '<h3>' + esc(c.nome || 'Corsa') + ' <small>corsa delle ' + oreOrario(c.inizio) + ' · telefono ' + esc(v.dev.uniqueId) + '</small></h3>' +
+        '<div class="sotto">' + trov + ' fermate su ' + c.righe.length + ' rilevate</div>' +
+        '<table><thead><tr><th>Fermata</th><th>Orario</th><th>Check-in</th><th>Check-out</th><th>Ritardo</th></tr></thead><tbody></tbody></table>';
+      const tb = b.querySelector('tbody');
+      for (const r of c.righe) {
+        const [rt, cl] = ritardo(r), tr = document.createElement('tr');
+        tr.innerHTML = '<td class="f">' + esc(nomeF(r.f)) + '</td><td>' + oreOrario(r.arr) + (r.par !== r.arr ? '<br><span class="nota">' + oreOrario(r.par) + '</span>' : '') +
+          '</td><td>' + ore(r.dentro) + '</td><td>' + ore(r.fuori) + '</td><td class="' + cl + '">' + rt + '</td>';
+        tr.onclick = () => salta(r.dentro, fermate[r.f]);
+        tb.appendChild(tr); righe.push({ ...r, tr });
+        csv.push([v.dev.uniqueId, (c.nome || '') + ' ' + oreOrario(c.inizio), nomeF(r.f), oreOrario(r.arr), oreOrario(r.par), ore(r.dentro), ore(r.fuori), r.dentro == null ? '' : Math.round((r.dentro - r.arr) / 60)]);
+      }
+      lato.appendChild(b);
+    } else {
+      // nessuna corsa d'orario riconosciuta: si elencano le soste alle fermate così come sono
+      const b = document.createElement('div'); b.className = 'blocco'; b.style.setProperty('--c', v.colore);
+      b.innerHTML = '<h3>Telefono ' + esc(v.dev.uniqueId) + ' <small>nessuna corsa d\'orario riconosciuta</small></h3>' +
+        '<div class="sotto">' + (visite.length ? 'Soste alle fermate della linea, in ordine di tempo.' : 'Il telefono non è passato da nessuna fermata della linea.') + '</div>' +
+        (visite.length ? '<table><thead><tr><th>Fermata</th><th>Check-in</th><th>Check-out</th><th>Sosta</th></tr></thead><tbody></tbody></table>' : '');
+      const tb = b.querySelector('tbody');
+      for (const x of visite) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = '<td class="f">' + esc(nomeF(x.f)) + '</td><td>' + ore(x.dentro) + '</td><td>' + ore(x.fuori) + '</td><td>' + Math.round((x.fuori - x.dentro) / 60) + ' min</td>';
+        tr.onclick = () => salta(x.dentro, fermate[x.f]);
+        tb.appendChild(tr); righe.push({ ...x, tr });
+        csv.push([v.dev.uniqueId, '', nomeF(x.f), '', '', ore(x.dentro), ore(x.fuori), '']);
+      }
+      lato.appendChild(b);
+    }
+    // punti notevoli: entrate e uscite registrate da Traccar (geo aree della linea)
+    const ev = (v.eventi || []).filter(e => nomiGeo.has(e.geofenceId));
+    if (ev.length) {
+      const b = document.createElement('div'); b.className = 'blocco'; b.style.setProperty('--c', '#5E5E5D');
+      b.innerHTML = '<h3>Punti notevoli <small>check-in e check-out registrati da Traccar · telefono ' + esc(v.dev.uniqueId) + '</small></h3>' +
+        '<table><thead><tr><th>Punto</th><th>Evento</th><th>Ora</th></tr></thead><tbody>' +
+        ev.map(e => '<tr data-t="' + Date.parse(e.eventTime) / 1000 + '"><td class="f">' + esc(nomiGeo.get(e.geofenceId)) + '</td><td>' + (e.type === 'geofenceEnter' ? 'check-in' : 'check-out') + '</td><td>' + ore(Date.parse(e.eventTime) / 1000) + '</td></tr>').join('') + '</tbody></table>';
+      b.querySelectorAll('tr[data-t]').forEach(tr => tr.onclick = () => salta(+tr.dataset.t));
+      lato.appendChild(b);
+    }
+  }
+  $('#csv').onclick = () => {
+    const testo = '﻿' + csv.map(r => r.map(x => '"' + String(x).replace(/"/g, '""') + '"').join(';')).join('\r\n');
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([testo], { type: 'text/csv' }));
+    a.download = 'storico_' + linea.codice + '_' + $('#giorno').value + '.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  };
+}
+function salta(s, f) {
+  if (s != null) { t = Math.max(t0, Math.min(t1, s)); $('#tempo').value = Math.round((t - t0) / Math.max(1, t1 - t0) * 1000); disegna(); }
+  if (f) mappa.setView([f.lat, f.lon], Math.max(mappa.getZoom(), 14), { animate: false });   // senza animazione: un clic durante l'inquadratura iniziale andava perso
+}
+
+if (chiave) entra().catch(() => { sessionStorage.removeItem(CHIAVE); chiave = ''; });
+</script>
+</body>
+</html>
